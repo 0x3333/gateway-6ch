@@ -1,0 +1,12 @@
+[submodule "deps/pico-sdk"]
+	path = deps/pico-sdk
+	url = git@github.com:raspberrypi/pico-sdk.git
+[submodule "deps/pico-extras"]
+	path = deps/pico-extras
+	url = git@github.com:raspberrypi/pico-extras.git
+[submodule "deps/FreeRTOS-Kernel"]
+	path = deps/FreeRTOS-Kernel
+	url = git@github.com:FreeRTOS/FreeRTOS-Kernel.git
+[submodule "deps/min"]
+	path = deps/min
+	url = git@github.com:min-protocol/min.git

@@ -1,0 +1,93 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+.pio_version 0 // only requires PIO version 0
+
+.program uart_tx
+.side_set 1 opt
+
+; An 8n1 UART transmit program.
+
+; Out pins      = TX
+; Set pins      = TX_EN
+; Side-set pins = TX
+
+.wrap_target
+start:
+    pull                     ; Wait until next byte
+    set pins, 1              ; Set TX_EN
+    set x, 7   side 0b0 [7]  ; Preload bit counter, assert start bit for 8 clocks
+bitloop:                     ; This loop will run 8 times (8n1 UART)
+    out pins, 1              ; Shift 1 bit from OSR to the first OUT pin
+    jmp x-- bitloop   [6]    ; Each loop iteration is 8 cycles.
+    nop side 0b1 [7]         ; stop bit
+    set pins, 0              ; Clear TX_EN
+    jmp !osre start          ; If still has data, jump to start
+    irq nowait 0 rel         ; If no more data, set irq and jump to start waiting for more data
+.wrap
+
+% c-sdk {
+#include "uart.h"
+#include "hardware/clocks.h"
+
+static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin_tx, uint pin_tx_en, uint baud)
+{
+    // Tell PIO to initially drive output-high on the selected pin, then map PIO
+    // onto that pin with the IO muxes.
+    pio_sm_set_pins_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
+    pio_sm_set_pindirs_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
+    pio_gpio_init(pio, pin_tx);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_tx, 2, true);
+    pio_gpio_init(pio, pin_tx_en);
+
+    pio_sm_config c = uart_tx_program_get_default_config(offset);
+
+    // OUT shifts to right, no autopull
+    sm_config_set_out_shift(&c, true, false, 8);
+
+    // We are mapping both OUT and side-set to the same pin, because sometimes
+    // we need to assert user data onto the pin (with OUT) and sometimes
+    // assert constant values (start/stop bit)
+    sm_config_set_out_pin_base(&c, pin_tx);
+    sm_config_set_out_pin_count(&c, 1);
+    sm_config_set_set_pin_base(&c, pin_tx_en);
+    sm_config_set_set_pin_count(&c, 1);
+    sm_config_set_sideset_pin_base(&c, pin_tx);
+
+    // We only need TX, so get an 8-deep FIFO!
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // SM transmits 1 bit per 8 execution cycles.
+    float div = (float)clock_get_hz(clk_sys) / (8 * baud);
+    sm_config_set_clkdiv(&c, div);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void uart_tx_program_putc_blocking(PIO pio, uint sm, char c)
+{
+    pio_sm_put_blocking(pio, sm, (uint32_t)c);
+}
+
+static inline void pio_tx_putc_blocking(struct pio_uart *uart, char c)
+{
+    uart_tx_program_putc_blocking(uart->tx_pio, uart->tx_sm, c);
+}
+
+static inline void uart_tx_program_puts_blocking(PIO pio, uint sm, const char *s)
+{
+    while (*s)
+    {
+        uart_tx_program_putc_blocking(pio, sm, *s++);
+    }
+}
+
+static inline void pio_tx_puts_blocking(struct pio_uart *uart, const char *s)
+{
+    uart_tx_program_puts_blocking(uart->tx_pio, uart->tx_sm, s);
+}
+
+%}
