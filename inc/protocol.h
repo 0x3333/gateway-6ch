@@ -24,6 +24,7 @@ struct p_base
     uint8_t bus;         // From 0 to 5
     uint8_t mb_slave;    // Modbus Slave address
     uint8_t mb_function; // Modbus function to use
+    uint8_t _padding;    // Alignment padding
     uint16_t mb_address; // Modbus first address to process
     uint16_t length;     // How many entries to process
 } __attribute__((packed));

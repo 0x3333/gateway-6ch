@@ -203,4 +203,16 @@ int printf(const char *restrict format, ...);
 #define debug_raw(...) __custom_debug(__debug_raw_P_, __VA_ARGS__)
 #define idebug_raw(...) __custom_idebug(__debug_raw_P_, " ", __VA_ARGS__)
 
+/* Custom array in Hex debugger */
+#define debug_array(data, length)            \
+    do                                       \
+    {                                        \
+        printf("%s = ", #data);              \
+        for (uint8_t i = 0; i < length; i++) \
+        {                                    \
+            printf("0x%02x ", data[i]);      \
+        }                                    \
+        printf("\n");                        \
+    } while (0)
+
 #endif /* NDEBUG */

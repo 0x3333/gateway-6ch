@@ -10,15 +10,15 @@ set(PROJECT_URL         "https://github.com/0x3333")
 # The target RP2040 board.
 set(PICO_BOARD pico CACHE STRING "Board type")
 
-# Compiler defines.
-set(PROJECT_DEFINES
-)
-
 set(LIBS_PATH deps)
 
 set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-extras)
 set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/FreeRTOS-Kernel)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_definitions(-DDEBUG_BUILD)
+endif()
 
 # Declare the source files.
 set(PROJECT_SRC_FILES
@@ -150,9 +150,26 @@ if(${PROJECT_USES_PIO})
 endif()
 
 # Libraries, includes and defines.
-target_compile_definitions(${PROJECT_NAME}   PUBLIC ${PROJECT_DEFINES})
-target_include_directories(${PROJECT_NAME}   PUBLIC ${PROJECT_INCLUDE_PATHS})
-target_link_libraries(${PROJECT_NAME}        ${PROJECT_LINK_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS})
+target_link_libraries(${PROJECT_NAME} ${PROJECT_LINK_LIBRARIES})
+
+# Enable compiler insights
+set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES COMPILE_FLAGS "-Wextra -Wpedantic -Wall")
+
+# Project defines.
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+    # Use ESP UART as alternative to debugging
+    PICO_DEFAULT_UART=1
+    PICO_DEFAULT_UART_BAUD_RATE=115200
+    PICO_DEFAULT_UART_TX_PIN=4
+    PICO_DEFAULT_UART_RX_PIN=5
+)
+
+# Libs defines.
+target_compile_definitions(min PUBLIC
+    MAX_PAYLOAD=32
+    NO_TRANSPORT_PROTOCOL=1
+)
 
 # Tell the pico SDK to also output bin/hex/uf2 files.
 pico_add_extra_outputs(${PROJECT_NAME})

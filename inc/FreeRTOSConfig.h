@@ -11,7 +11,6 @@
 #define configMINIMAL_STACK_SIZE                (configSTACK_DEPTH_TYPE) 256
 #define configUSE_16_BIT_TICKS                  0
 #define configIDLE_SHOULD_YIELD                 1
-#define configDEFAULT_PRIORITY                  (configMAX_PRIORITIES / 2)
 
 // Synchronization Related.
 #define configUSE_MUTEXES                       1
@@ -64,11 +63,19 @@
 */
 
 // SMP port only.
+#ifndef configNUMBER_OF_CORES
+#ifdef DEBUG_BUILD
+#define configNUMBER_OF_CORES                   1
+#else
 #define configNUMBER_OF_CORES                   2
+#endif
+#endif
 #define configUSE_PASSIVE_IDLE_HOOK             0
 #define configTICK_CORE                         0
 #define configRUN_MULTIPLE_PRIORITIES           1
+#if (configNUMBER_OF_CORES > 1)
 #define configUSE_CORE_AFFINITY                 1
+#endif
 
 // RP2040 specific.
 #define configSUPPORT_PICO_SYNC_INTEROP         1
@@ -97,5 +104,9 @@
 #define INCLUDE_xQueueGetMutexHolder            1
 
 // A header file that defines trace macro can be included here.
+
+#define tskHIGH_PRIORITY                        (configMAX_PRIORITIES / 1)
+#define tskDEFAULT_PRIORITY                     (configMAX_PRIORITIES / 2)
+#define tskLOW_PRIORITY                         (configMAX_PRIORITIES / 4)
 
 #endif // FREERTOS_CONFIG_H_

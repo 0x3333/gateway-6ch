@@ -21,7 +21,7 @@ void task_bus_manager(void *arg)
 
     while (true)
     {
-        taskYIELD();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -35,14 +35,12 @@ int32_t mb_send(uint8_t bus, uint8_t *payload, uint8_t payload_length)
 {
     struct pio_uart *const uart = pio_uarts[bus];
 
-    // Copy payload to DMA buffer
-    memcpy(uart->tx_dma_buffer, payload, payload_length);
-    pio_tx_dma_start_transfer(uart, payload_length);
+    pio_uart_write(uart, payload, payload_length);
 
     // FIXME: Wait for transmittion to finish
 
     uint8_t c;
-    size_t received_length = xStreamBufferReceive(uart->rx_sbuffer, &c, 1, pdMS_TO_TICKS(MB_SEND_WAIT_TIME));
+    size_t received_length = pio_uart_read(uart, &c, 1);
 
     return 0;
 }
