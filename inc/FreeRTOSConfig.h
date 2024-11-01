@@ -64,9 +64,6 @@
 
 // SMP port only.
 #ifndef configNUMBER_OF_CORES
-#ifdef DEBUG_BUILD
-#define configNUMBER_OF_CORES                   1
-#else
 #define configNUMBER_OF_CORES                   2
 #endif
 #endif

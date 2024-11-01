@@ -20,6 +20,11 @@ static void task_comm_esp(void *arg);
 
 int main()
 {
+#ifdef DEBUG_BUILD
+    // Allow core1 to launch in debugger.
+    timer_hw->dbgpause = 0;
+#endif
+
 #if LIB_PICO_STDIO_UART
     // If using UART as default output, initialize it first
     init_hw_uart(&esp_uart);
@@ -33,7 +38,7 @@ int main()
     while (!stdio_usb_connected())
     {
         wait++;
-        if (wait >= 2000/8)
+        if (wait >= 2000 / 8)
             break;
         sleep_ms(8);
     }

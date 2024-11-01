@@ -12,7 +12,10 @@
             "device": "rp2040",
             "numberOfProcessors": 2,
             "BMPGDBSerialPort": "/dev/cu.usbmodem316F378F31321",
-            "runToEntryPoint": "main"
+            "runToEntryPoint": "main",
+            "preLaunchCommands": [
+                "monitor frequency 8M"
+            ]
         },
         {
             "name": "BMP Attach",
@@ -26,6 +29,9 @@
             "numberOfProcessors": 2,
             "breakAfterReset": true,
             "BMPGDBSerialPort": "/dev/cu.usbmodem316F378F31321",
+            "preAttachCommands": [
+                "monitor frequency 8M"
+            ]
         },
         // {
         //     "name": "PProbe Attach",
@@ -55,6 +61,7 @@
         //     "type": "cortex-debug",
         //     "servertype": "openocd",
         //     "gdbPath": "arm-none-eabi-gdb",
+        //     "objdumpPath": "arm-none-eabi-objdump",
         //     "device": "RP2040",
         //     "numberOfProcessors": 2,
         //     "configFiles": [
@@ -66,9 +73,6 @@
         //     "postRestartCommands": [
         //         "break main",
         //         "continue"
-        //     ],
-        //     "postLaunchCommands": [
-        //         "monitor rp2040.core1 arp_reset assert 0 ; rp2040.core0 arp_reset assert 0 ; reset halt"
         //     ],
         // },
     ]
