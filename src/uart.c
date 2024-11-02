@@ -57,6 +57,7 @@ struct pio_uart pio_uart_bus_1 = {
         .rx_pin = 7,
         .tx_pin = 8,
     },
+    .id = 1,
     .en_pin = 9,
 };
 
@@ -66,6 +67,7 @@ struct pio_uart pio_uart_bus_2 = {
         .rx_pin = 10,
         .tx_pin = 11,
     },
+    .id = 2,
     .en_pin = 12,
 };
 
@@ -75,6 +77,7 @@ struct pio_uart pio_uart_bus_3 = {
         .rx_pin = 13,
         .tx_pin = 14,
     },
+    .id = 3,
     .en_pin = 15,
 };
 
@@ -84,6 +87,7 @@ struct pio_uart pio_uart_bus_4 = {
         .rx_pin = 18,
         .tx_pin = 16,
     },
+    .id = 4,
     .en_pin = 17,
 };
 
@@ -93,6 +97,7 @@ struct pio_uart pio_uart_bus_5 = {
         .rx_pin = 19,
         .tx_pin = 20,
     },
+    .id = 5,
     .en_pin = 21,
 };
 
@@ -102,6 +107,7 @@ struct pio_uart pio_uart_bus_6 = {
         .rx_pin = 28,
         .tx_pin = 26,
     },
+    .id = 6,
     .en_pin = 27,
 };
 
@@ -304,6 +310,7 @@ bool pio_uart_writable(struct pio_uart *const uart)
 
 //
 // PIO UART Write
+// FIXME: Create another way of writing to the UART, using the same method that we use in the hardware uart
 void pio_uart_write(struct pio_uart *const uart, const uint8_t *data, uint8_t length)
 {
     if (length > PIO_BUFFER_SIZE)
@@ -342,19 +349,6 @@ void pio_uart_write(struct pio_uart *const uart, const uint8_t *data, uint8_t le
 // PIO UART Read
 inline uint8_t pio_uart_read(struct pio_uart *const uart, uint8_t *data, uint8_t length)
 {
-    // FIXME: Move this to a maintenance task to avoid overhead on reads.
-    if (uart->rx_sbuffer_overrun)
-    {
-        uart->rx_sbuffer_overrun = false;
-        for (size_t i = 0; pio_uarts[i] != NULL; i++)
-        {
-            if (pio_uarts[i] == uart)
-            {
-                printf("[WARN] PIO UART %u RX Overrun.", i);
-            }
-        }
-    }
-
     return xStreamBufferReceive(uart->rx_sbuffer, data, length, 0);
 }
 
@@ -389,4 +383,34 @@ static void isr_pio_uart_tx(void)
             pio_uarts[i]->is_transmitting = false;
         }
     }
+}
+
+//
+// Task Maintenance
+
+static void task_uart_maintenance(void *arg)
+{
+    (void)arg;
+
+    while (true)
+    {
+        for (size_t i = 0; pio_uarts[i] != NULL; i++)
+        {
+            // Check for overrun on RX StringBuffer
+            if (pio_uarts[i]->rx_sbuffer_overrun)
+            {
+                pio_uarts[i]->rx_sbuffer_overrun = false;
+                printf("[WARN] PIO UART %u RX Overrun.", pio_uarts[i]->id);
+            }
+        }
+
+        // TODO: Implement LED blinking when TX/RX
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+void init_uart_maintenance_task(void)
+{
+    xTaskCreate(task_uart_maintenance, "UART-M", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 }

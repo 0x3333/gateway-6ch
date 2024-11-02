@@ -2,7 +2,7 @@
 #include <queue.h>
 
 #include "esp.h"
-#include "protocol.h"
+#include "messages.h"
 
 //
 // Type

@@ -66,7 +66,6 @@
 #ifndef configNUMBER_OF_CORES
 #define configNUMBER_OF_CORES                   2
 #endif
-#endif
 #define configUSE_PASSIVE_IDLE_HOOK             0
 #define configTICK_CORE                         0
 #define configRUN_MULTIPLE_PRIORITIES           1

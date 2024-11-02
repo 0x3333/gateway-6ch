@@ -6,7 +6,7 @@
 #include <queue.h>
 
 #include "uart.h"
-#include "protocol.h"
+#include "messages.h"
 
 #ifndef MB_SEND_WAIT_TIME
 #define MB_SEND_WAIT_TIME 30

@@ -60,6 +60,7 @@ struct hw_uart
 struct pio_uart
 {
     const struct uart super;
+    const uint8_t id;
     const uint en_pin;
 
     PIO rx_pio;
@@ -141,5 +142,10 @@ void hw_uart_write(struct hw_uart *const hw_uart, const uint8_t *data, uint8_t l
  * @return Number of bytes read. May not be equal to data_length.
  */
 uint8_t hw_uart_read(struct hw_uart *const uart, uint8_t *data, uint8_t length);
+
+/**
+ * Initialize the UART Maintenance Task
+ */
+void init_uart_maintenance_task(void);
 
 #endif // UART_H_

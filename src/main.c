@@ -9,7 +9,7 @@
 
 #include "uart.h"
 #include "modbus.h"
-#include "protocol.h"
+#include "messages.h"
 #include "esp.h"
 #include "led.h"
 
@@ -71,6 +71,8 @@ int main()
     xTaskCreate(task_pio_uart_rx, "UART-RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_flash_act_led, "ACT-LED", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 
+    init_uart_maintenance_task();
+
     printf("Running\n\n");
     vTaskStartScheduler();
 
@@ -105,9 +107,9 @@ static void task_comm_esp(void *arg)
     struct p_config_mb_read payload = {
         .base = {
             .bus = 1,
-            .mb_slave = 0x2,
-            .mb_function = MB_FUNC_READ_COILS,
-            .mb_address = 0x3,
+            .slave = 0x2,
+            .function = MB_FUNC_READ_COILS,
+            .address = 0x3,
             .length = 0x4},
         .interval_ms = 0x5,
     };
