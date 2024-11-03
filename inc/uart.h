@@ -27,6 +27,10 @@
 // Max number of PIO UARTs possible
 #define NUM_PIO_UARTS ((size_t)(NUM_PIOS * NUM_PIO_STATE_MACHINES / 2))
 
+#define UART_TYPE(id) (id <= 3 ? "HW" : "PIO")
+#define UART_PIO_ID(id) (id << 2)
+#define UART_ID(id) (id <= 3 ? id : id >> 2)
+
 //
 // Structures
 //
@@ -47,6 +51,8 @@ struct uart
     StreamBufferHandle_t rx_sbuffer;  // RX Stream Buffer
     volatile bool rx_sbuffer_overrun; // If the RX Stream Buffer has overrun
     const uint32_t id;                // Used to identify this UART between all instances
+
+    volatile bool activity; // If there is activity in this UART
 };
 
 struct hw_uart

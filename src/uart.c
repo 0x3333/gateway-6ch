@@ -7,6 +7,7 @@
 
 #include "debug.h"
 #include "time.h"
+#include "led.h"
 
 // FIXME: Convert all Panic to some kind fo log in flash, so the watchdog could recovery the application, but the log will be stored.
 
@@ -36,6 +37,10 @@
 
 #ifndef PIO_UART_TX_FIFO_IRQ_INDEX
 #define PIO_UART_TX_FIFO_IRQ_INDEX 1
+#endif
+
+#ifndef UART_ACT_LED_DELAY
+#define UART_ACT_LED_DELAY 50
 #endif
 
 #if PIO_UART_TX_DONE_IRQ_INDEX == PIO_UART_TX_FIFO_IRQ_INDEX
@@ -82,7 +87,7 @@ struct pio_uart pio_uart_bus_1 = {
         .baudrate = 115200,
         .rx_pin = 7,
         .tx_pin = 8,
-        .id = 1 << 2,
+        .id = UART_PIO_ID(1),
     },
     .en_pin = 9,
 };
@@ -92,7 +97,7 @@ struct pio_uart pio_uart_bus_2 = {
         .baudrate = 115200,
         .rx_pin = 10,
         .tx_pin = 11,
-        .id = 2 << 2,
+        .id = UART_PIO_ID(2),
     },
     .en_pin = 12,
 };
@@ -102,7 +107,7 @@ struct pio_uart pio_uart_bus_3 = {
         .baudrate = 115200,
         .rx_pin = 13,
         .tx_pin = 14,
-        .id = 3 << 2,
+        .id = UART_PIO_ID(3),
     },
     .en_pin = 15,
 };
@@ -112,7 +117,7 @@ struct pio_uart pio_uart_bus_4 = {
         .baudrate = 115200,
         .rx_pin = 18,
         .tx_pin = 16,
-        .id = 4 << 2,
+        .id = UART_PIO_ID(4),
     },
     .en_pin = 17,
 };
@@ -122,7 +127,7 @@ struct pio_uart pio_uart_bus_5 = {
         .baudrate = 115200,
         .rx_pin = 19,
         .tx_pin = 20,
-        .id = 5 << 2,
+        .id = UART_PIO_ID(5),
     },
     .en_pin = 21,
 };
@@ -132,7 +137,7 @@ struct pio_uart pio_uart_bus_6 = {
         .baudrate = 115200,
         .rx_pin = 28,
         .tx_pin = 26,
-        .id = 6 << 2,
+        .id = UART_PIO_ID(6),
     },
     .en_pin = 27,
 };
@@ -316,6 +321,8 @@ static void isr_hw_uart(void)
             {
                 size_t written = xStreamBufferSendFromISR(uart->super.rx_sbuffer, data, size, NULL);
                 uart->super.rx_sbuffer_overrun |= written != size; // Check if we overrun the buffer
+
+                uart->super.activity = true;
             }
         }
 
@@ -389,6 +396,8 @@ static void isr_pio_uart_rx(void)
             // Check if we overrun the buffer
             size_t written = xStreamBufferSendFromISR(uart->super.rx_sbuffer, src, size, NULL);
             uart->super.rx_sbuffer_overrun |= written != size;
+
+            uart->super.activity = true;
         }
     }
 }
@@ -435,6 +444,8 @@ inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, s
 
         hw_uart_fill_tx_fifo(uart);
 
+        uart->super.activity = true;
+
         taskENABLE_INTERRUPTS();
 
         return written;
@@ -455,6 +466,8 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
         pio_uart_tx_fifo_irq_enabled(uart, true);
 
         pio_uart_fill_tx_fifo(uart);
+
+        uart->super.activity = true;
 
         taskENABLE_INTERRUPTS();
 
@@ -481,12 +494,13 @@ static inline void check_overrrun(struct uart *uart)
     if (uart->rx_sbuffer_overrun)
     {
         uart->rx_sbuffer_overrun = false;
-        printf("[WARN] UART %lu RX Overrun.\n", uart->id);
+
+        printf("[WARN] %s UART %lu RX Overrun.\n", UART_TYPE(uart->id), UART_ID(uart->id));
     }
     if (uart->tx_sbuffer_overrun)
     {
         uart->tx_sbuffer_overrun = false;
-        printf("[WARN] UART %lu TX Overrun.\n", uart->id);
+        printf("[WARN] %s UART %lu TX Overrun.\n", UART_TYPE(uart->id), UART_ID(uart->id));
     }
 }
 
@@ -494,23 +508,46 @@ static void task_uart_maintenance(void *arg)
 {
     (void)arg;
 
+    gpio_init(ACT_LED_PIN);
+    gpio_set_dir(ACT_LED_PIN, GPIO_OUT);
+
     while (true)
     {
+        bool activity = false;
+
         //
         // Hardware UARTs
         for (size_t i = 0; hw_uarts[i] != NULL; i++)
         {
             check_overrrun(&hw_uarts[i]->super);
+
+            activity |= hw_uarts[i]->super.activity;
+            hw_uarts[i]->super.activity = false;
         }
 
         //
         // PIO UARTs
+
         for (size_t i = 0; pio_uarts[i] != NULL; i++)
         {
             check_overrrun(&pio_uarts[i]->super);
+
+            activity |= pio_uarts[i]->super.activity;
+            pio_uarts[i]->super.activity = false;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // Act LED
+        if (activity)
+        {
+            gpio_xor_mask(1u << ACT_LED_PIN);
+            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY / 2));
+            gpio_xor_mask(1u << ACT_LED_PIN);
+            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY / 2));
+        }
+        else
+        {
+            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY));
+        }
     }
 
     // TODO: Implement LED blinking when TX/RX

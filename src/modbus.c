@@ -35,7 +35,7 @@ int32_t mb_send(uint8_t bus, uint8_t *payload, uint8_t payload_length)
 {
     struct pio_uart *const uart = pio_uarts[bus];
 
-    pio_uart_write(uart, payload, payload_length);
+    pio_uart_write_bytes(uart, payload, payload_length);
 
     // FIXME: Wait for transmittion to finish
 

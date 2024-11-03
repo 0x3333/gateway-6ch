@@ -11,7 +11,6 @@
 #include "modbus.h"
 #include "messages.h"
 #include "esp.h"
-#include "led.h"
 
 static void task_flash_act_led(void *arg);
 static void task_pio_uart_tx(void *arg);
@@ -77,7 +76,6 @@ int main()
     xTaskCreate(task_comm_esp, "Comm-ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_pio_uart_tx, "UART-TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_pio_uart_rx, "UART-RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
-    xTaskCreate(task_flash_act_led, "ACT-LED", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 
     printf("Running\n\n");
     vTaskStartScheduler();
@@ -87,21 +85,6 @@ int main()
 }
 
 struct min_context min_ctx;
-
-static void task_flash_act_led(void *arg)
-{
-    (void)arg;
-
-    gpio_init(ACT_LED_PIN);
-    gpio_set_dir(ACT_LED_PIN, GPIO_OUT);
-
-    while (true)
-    {
-        gpio_xor_mask(1u << ACT_LED_PIN);
-
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-}
 
 static void task_comm_esp(void *arg)
 {
