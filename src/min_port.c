@@ -7,35 +7,28 @@
 #include "target/min.h"
 #include "uart.h"
 
-uint8_t tx_buffer[UART_TX_BUFFER_SIZE];
-uint8_t tx_buffer_index;
-
 void min_tx_start(uint8_t port)
 {
     (void)port;
-
-    tx_buffer_index = 0;
 }
 
 void min_tx_finished(uint8_t port)
 {
     (void)port;
-
-    hw_uart_write(&esp_uart, (uint8_t *)&tx_buffer, tx_buffer_index);
 }
 
 void min_tx_byte(uint8_t port, uint8_t byte)
 {
     (void)port;
 
-    tx_buffer[tx_buffer_index++] = byte;
+    hw_uart_write_bytes(&esp_uart, &byte, 1);
 }
 
 uint16_t min_tx_space(uint8_t port)
 {
     (void)port;
 
-    return TOTAL_BUFFER_SIZE; // Technically not correct, but works
+    return UARTS_BUFFER_SIZE; // Technically not correct, but works
 }
 
 uint32_t min_time_ms(void)

@@ -17,15 +17,16 @@
 .wrap_target
 start:
     pull                     ; Wait until next byte
-    set pins, 1              ; Set TX_EN
+    set pins, 1              ; Enable RS485 transmitter
     set x, 7   side 0b0 [7]  ; Preload bit counter, assert start bit for 8 clocks
 bitloop:                     ; This loop will run 8 times (8n1 UART)
     out pins, 1              ; Shift 1 bit from OSR to the first OUT pin
     jmp x-- bitloop   [6]    ; Each loop iteration is 8 cycles.
-    nop side 0b1 [7]         ; stop bit
-    set pins, 0              ; Clear TX_EN
+    nop side 0b1 [7]         ; Stop bit
+    set pins, 0              ; Disable RS485 transmitter
     jmp !osre start          ; If still has data, jump to start
-    irq nowait 0 rel         ; If no more data, set irq and jump to start waiting for more data
+    irq nowait 0 rel         ; If no more data, set IRQ...
+                             ; ... and jump to start waiting for more data
 .wrap
 
 % c-sdk {
@@ -67,27 +68,27 @@ static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin_
     pio_sm_set_enabled(pio, sm, true);
 }
 
-static inline void uart_tx_program_putc_blocking(PIO pio, uint sm, char c)
+static inline void pio_uart_putc_blocking(struct pio_uart *uart, char c)
 {
-    pio_sm_put_blocking(pio, sm, (uint32_t)c);
+    pio_sm_put_blocking(uart->tx_pio, uart->tx_sm, (uint32_t)c);
 }
 
-static inline void pio_tx_putc_blocking(struct pio_uart *uart, char c)
+static inline void pio_uart_putc(struct pio_uart *uart, char c)
 {
-    uart_tx_program_putc_blocking(uart->tx_pio, uart->tx_sm, c);
+    pio_sm_put(uart->tx_pio, uart->tx_sm, (uint32_t)c);
 }
 
-static inline void uart_tx_program_puts_blocking(PIO pio, uint sm, const char *s)
+static inline void pio_uart_puts_blocking(struct pio_uart *uart, const char *s)
 {
     while (*s)
     {
-        uart_tx_program_putc_blocking(pio, sm, *s++);
+        pio_uart_putc_blocking(uart, *s++);
     }
 }
 
-static inline void pio_tx_puts_blocking(struct pio_uart *uart, const char *s)
+static inline bool pio_uart_is_writable(struct pio_uart *uart)
 {
-    uart_tx_program_puts_blocking(uart->tx_pio, uart->tx_sm, s);
+    return !pio_sm_is_tx_fifo_full(uart->tx_pio, uart->tx_sm);
 }
 
 %}

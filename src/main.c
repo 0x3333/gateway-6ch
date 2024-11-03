@@ -55,6 +55,9 @@ int main()
 
     // Init Peripherals
     printf("Initializing Peripherals...\n");
+
+    uint32_t irq_status = save_and_disable_interrupts();
+
 #if !LIB_PICO_STDIO_UART
     init_hw_uart(&esp_uart);
 #endif
@@ -64,14 +67,17 @@ int main()
     init_pio_uart(&pio_uart_bus_5);
     init_pio_uart(&pio_uart_bus_6);
 
+    restore_interrupts(irq_status);
+
     // Init Tasks
     printf("Creating tasks...\n");
+
+    init_uart_maintenance_task();
+
     xTaskCreate(task_comm_esp, "Comm-ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_pio_uart_tx, "UART-TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_pio_uart_rx, "UART-RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_flash_act_led, "ACT-LED", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
-
-    init_uart_maintenance_task();
 
     printf("Running\n\n");
     vTaskStartScheduler();
@@ -104,6 +110,13 @@ static void task_comm_esp(void *arg)
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
+    // uint8_t data[UARTS_BUFFER_SIZE];
+    // for (size_t i = 0; i < UARTS_BUFFER_SIZE; i++)
+    // {
+    //     data[i] = i + 1;
+    // }
+    // hw_uart_write_bytes(&esp_uart, data, UARTS_BUFFER_SIZE);
+
     struct p_config_mb_read payload = {
         .base = {
             .bus = 1,
@@ -118,14 +131,14 @@ static void task_comm_esp(void *arg)
 
     min_send_frame(&min_ctx, 0x31, (const uint8_t *)&payload, sizeof payload);
 
-    uint8_t buffer[UART_FIFO_DEEP] = {0};
+    uint8_t buffer[UARTS_BUFFER_SIZE / 2] = {0};
     uint8_t i = 0;
     while (true)
     {
         if (i++ == 0)
             gpio_xor_mask(1u << PICO_DEFAULT_LED_PIN);
 
-        uint8_t count = hw_uart_read(&esp_uart, (uint8_t *)&buffer, UART_FIFO_DEEP);
+        uint8_t count = hw_uart_read_bytes(&esp_uart, &buffer, UARTS_BUFFER_SIZE / 2);
         min_poll(&min_ctx, buffer, count);
 
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -138,19 +151,18 @@ static void task_pio_uart_tx(void *arg)
 
     // FIXME: This task is just a placeholder
 
-    uint8_t count = 10;
+    uint8_t count = 64;
     uint8_t buffer[count];
-    for (int i = 0; i < count - 1; i++)
+    for (int i = 0; i < count; i++)
     {
-        buffer[i] = 'A' + i;
+        buffer[i] = 0x21 + i;
     }
-    buffer[count - 1] = '\n';
 
     while (true)
     {
         for (size_t i = 0; pio_uarts[i] != NULL; i++)
         {
-            pio_uart_write(pio_uarts[i], (uint8_t *)&buffer, count);
+            pio_uart_write_bytes(pio_uarts[i], &buffer, count);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -161,12 +173,12 @@ static void task_pio_uart_rx(void *arg)
 {
     (void)arg;
 
-    uint8_t rx_buffer[PIO_BUFFER_SIZE];
+    uint8_t rx_buffer[UARTS_BUFFER_SIZE];
     while (true)
     {
         for (size_t i = 0; pio_uarts[i] != NULL; i++)
         {
-            size_t received_length = pio_uart_read(pio_uarts[i], (uint8_t *)&rx_buffer, PIO_BUFFER_SIZE);
+            size_t received_length = pio_uart_read_bytes(pio_uarts[i], &rx_buffer, UARTS_BUFFER_SIZE);
             if (received_length > 0)
             {
                 printf("%u Received %zu bytes:\n", i, received_length);
