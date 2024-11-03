@@ -12,7 +12,6 @@
 #include "messages.h"
 #include "esp.h"
 
-static void task_flash_act_led(void *arg);
 static void task_pio_uart_tx(void *arg);
 static void task_pio_uart_rx(void *arg);
 static void task_comm_esp(void *arg);
