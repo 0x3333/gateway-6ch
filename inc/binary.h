@@ -1,5 +1,5 @@
-#ifndef __BINARY_H
-#define __BINARY_H
+#ifndef _BINARY_H
+#define _BINARY_H
 
 #define B0 0
 #define B00 0
@@ -769,4 +769,4 @@
 #define XXXXXXX_ 0xfe
 #define XXXXXXXX 0xff
 
-#endif
+#endif // _BINARY_H

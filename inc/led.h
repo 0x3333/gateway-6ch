@@ -5,6 +5,9 @@
 // Defines
 //
 
-#define ACT_LED_PIN 0
+#define LED_PIN_ACT 0
+#define LED_PIN_BUILDIN PICO_DEFAULT_LED_PIN
+
+void init_led_task(void);
 
 #endif // LED_H_

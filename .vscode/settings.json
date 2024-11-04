@@ -1,15 +1,23 @@
 {
     "editor.formatOnSave": true,
     //
-    "cmake.options.statusBarVisibility": "compact",
-    "cmake.configureOnEdit": true,
     "cmake.automaticReconfigure": true,
-    "cmake.configureOnOpen": true,
     "cmake.buildBeforeRun": true,
+    "cmake.configureOnEdit": true,
+    "cmake.configureOnOpen": true,
     "cmake.deleteBuildDirOnCleanConfigure": true,
+    "cmake.generator": "Ninja",
+    "cmake.options.advanced": {
+        "cpack": {
+            "statusBarVisibility": "hidden"
+        },
+        "workflow": {
+            "statusBarVisibility": "hidden"
+        }
+    },
+    "cmake.options.statusBarVisibility": "compact",
     "cmake.parallelJobs": 8,
     "cmake.revealLog": "error",
-    "cmake.generator": "Ninja",
     //
     "C_Cpp.loggingLevel": "Debug",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",

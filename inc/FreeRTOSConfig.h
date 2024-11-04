@@ -32,7 +32,7 @@
 // Memory allocation related definitions.
 #define configSUPPORT_STATIC_ALLOCATION         0
 #define configSUPPORT_DYNAMIC_ALLOCATION        1
-#define configTOTAL_HEAP_SIZE                   (128*1024)
+#define configTOTAL_HEAP_SIZE                   (192*1024)
 #define configAPPLICATION_ALLOCATED_HEAP        0
 
 // Hook function related definitions.
@@ -41,7 +41,12 @@
 #define configUSE_DAEMON_TASK_STARTUP_HOOK      0
 
 // Run time and task stats gathering related definitions.
+#ifdef DEBUG_BUILD
+#define configGENERATE_RUN_TIME_STATS           1
+#define configRUN_TIME_COUNTER_TYPE             uint64_t
+#else
 #define configGENERATE_RUN_TIME_STATS           0
+#endif
 #define configUSE_TRACE_FACILITY                1
 #define configUSE_STATS_FORMATTING_FUNCTIONS    0
 
@@ -104,5 +109,12 @@
 #define tskHIGH_PRIORITY                        (configMAX_PRIORITIES / 1)
 #define tskDEFAULT_PRIORITY                     (configMAX_PRIORITIES / 2)
 #define tskLOW_PRIORITY                         (configMAX_PRIORITIES / 4)
+
+#ifdef DEBUG_BUILD
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
+extern uint64_t time_us_64(void);						                                // "hardware/timer.h"
+#define RUN_TIME_STAT_time_us_64Divider configTICK_RATE_HZ			                    // stat granularity is mS, same as Tick Rate
+#define portGET_RUN_TIME_COUNTER_VALUE() (time_us_64()/RUN_TIME_STAT_time_us_64Divider)	// runtime counter in mS
+#endif
 
 #endif // FREERTOS_CONFIG_H_

@@ -1,13 +1,14 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <FreeRTOS.h>
+#include <stream_buffer.h>
+#include <task.h>
 
 #include "uart.h"
-#include <task.h>
 
 #include "debug.h"
 #include "time.h"
-#include "led.h"
 
 // FIXME: Convert all Panic to some kind fo log in flash, so the watchdog could recovery the application, but the log will be stored.
 
@@ -37,10 +38,6 @@
 
 #ifndef PIO_UART_TX_FIFO_IRQ_INDEX
 #define PIO_UART_TX_FIFO_IRQ_INDEX 1
-#endif
-
-#ifndef UART_ACT_LED_DELAY
-#define UART_ACT_LED_DELAY 50
 #endif
 
 #if PIO_UART_TX_DONE_IRQ_INDEX == PIO_UART_TX_FIFO_IRQ_INDEX
@@ -144,6 +141,8 @@ struct pio_uart pio_uart_bus_6 = {
 
 struct hw_uart *hw_uarts[NUM_UARTS + 1] = {NULL};
 struct pio_uart *pio_uarts[NUM_PIO_UARTS + 1] = {NULL};
+
+volatile bool uart_activity;
 
 //
 // UARTs Initialization
@@ -437,12 +436,11 @@ inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, s
     {
         taskDISABLE_INTERRUPTS();
 
+        hw_uart_fill_tx_fifo(uart);
+        hw_uart_tx_fifo_irq_enabled(uart, true);
+
         size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
         uart->super.tx_sbuffer_overrun |= (written != size);
-
-        uart_set_irqs_enabled(uart->native_uart, true, true);
-
-        hw_uart_fill_tx_fifo(uart);
 
         uart->super.activity = true;
 
@@ -459,14 +457,13 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
     {
         taskDISABLE_INTERRUPTS();
 
-        uart->tx_done = false;
+        pio_uart_fill_tx_fifo(uart);
+        pio_uart_tx_fifo_irq_enabled(uart, true);
+
         size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
         uart->super.tx_sbuffer_overrun |= (written != size);
 
-        pio_uart_tx_fifo_irq_enabled(uart, true);
-
-        pio_uart_fill_tx_fifo(uart);
-
+        uart->tx_done = false;
         uart->super.activity = true;
 
         taskENABLE_INTERRUPTS();
@@ -508,20 +505,15 @@ static void task_uart_maintenance(void *arg)
 {
     (void)arg;
 
-    gpio_init(ACT_LED_PIN);
-    gpio_set_dir(ACT_LED_PIN, GPIO_OUT);
-
     while (true)
     {
-        bool activity = false;
-
         //
         // Hardware UARTs
         for (size_t i = 0; hw_uarts[i] != NULL; i++)
         {
             check_overrrun(&hw_uarts[i]->super);
 
-            activity |= hw_uarts[i]->super.activity;
+            uart_activity |= hw_uarts[i]->super.activity;
             hw_uarts[i]->super.activity = false;
         }
 
@@ -532,25 +524,11 @@ static void task_uart_maintenance(void *arg)
         {
             check_overrrun(&pio_uarts[i]->super);
 
-            activity |= pio_uarts[i]->super.activity;
+            uart_activity |= pio_uarts[i]->super.activity;
             pio_uarts[i]->super.activity = false;
         }
-
-        // Act LED
-        if (activity)
-        {
-            gpio_xor_mask(1u << ACT_LED_PIN);
-            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY / 2));
-            gpio_xor_mask(1u << ACT_LED_PIN);
-            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY / 2));
-        }
-        else
-        {
-            vTaskDelay(pdMS_TO_TICKS(UART_ACT_LED_DELAY));
-        }
+        vTaskDelay(pdMS_TO_TICKS(25));
     }
-
-    // TODO: Implement LED blinking when TX/RX
 }
 
 void init_uart_maintenance_task(void)

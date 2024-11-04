@@ -95,6 +95,7 @@ extern struct pio_uart pio_uart_bus_3;
 extern struct pio_uart pio_uart_bus_4;
 extern struct pio_uart pio_uart_bus_5;
 extern struct pio_uart pio_uart_bus_6;
+extern volatile bool uart_activity;
 
 //
 // Functions

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <pico/stdlib.h>
+#include <pico/multicore.h>
 
 #include <FreeRTOS.h>
 #include <task.h>
@@ -8,9 +9,11 @@
 #include "debug.h"
 
 #include "uart.h"
+#include "led.h"
 #include "modbus.h"
 #include "messages.h"
 #include "esp.h"
+#include "cpu_usage.h"
 
 static void task_pio_uart_tx(void *arg);
 static void task_pio_uart_rx(void *arg);
@@ -18,10 +21,9 @@ static void task_comm_esp(void *arg);
 
 int main()
 {
-#ifdef DEBUG_BUILD
-    // Allow core1 to launch in debugger.
+    // Allow core1 to launch when debugger is atached.
     timer_hw->dbgpause = 0;
-#endif
+    multicore_reset_core1();
 
 #if LIB_PICO_STDIO_UART
     // If using UART as default output, initialize it first
@@ -54,6 +56,7 @@ int main()
     // Init Peripherals
     printf("Initializing Peripherals...\n");
 
+    // Disable IRQ because the initialization of the UARTs are one-by-one.
     uint32_t irq_status = save_and_disable_interrupts();
 
 #if !LIB_PICO_STDIO_UART
@@ -71,6 +74,8 @@ int main()
     printf("Creating tasks...\n");
 
     init_uart_maintenance_task();
+    init_led_task();
+    init_cpu_usage_task();
 
     xTaskCreate(task_comm_esp, "Comm-ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
     xTaskCreate(task_pio_uart_tx, "UART-TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);

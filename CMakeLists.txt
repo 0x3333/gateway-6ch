@@ -5,7 +5,7 @@
 set(PROJECT_NAME        "gateway")
 set(PROJECT_DESCRIPTION "6 Channel ETH <> RS485 Gateway")
 set(PROJECT_VERSION     "0.1")
-set(PROJECT_URL         "https://github.com/0x3333")
+set(PROJECT_URL         "https://github.com/0x3333/gateway-6ch")
 
 # The target RP2040 board.
 set(PICO_BOARD pico CACHE STRING "Board type")
@@ -20,14 +20,19 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG_BUILD)
 endif()
 
+# If we want to print CPU/HEAP usage in the console
+add_definitions(-DSHOW_CPU_USAGE)
+
 # Declare the source files.
 set(PROJECT_SRC_FILES
     src/main.c
-    src/uart.c
-    src/modbus.c
-    src/esp.c
+    src/cpu_usage.c
     src/crc.c
+    src/esp.c
+    src/led.c
     src/min_port.c
+    src/modbus.c
+    src/uart.c
 )
 
 # Declare the include paths.
@@ -149,18 +154,20 @@ if(${PROJECT_USES_PIO})
     endforeach()
 endif()
 
+
 # Libraries, includes and defines.
 target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS})
 target_link_libraries(${PROJECT_NAME} ${PROJECT_LINK_LIBRARIES})
 
 # Enable compiler insights
 set_source_files_properties(${PROJECT_SRC_FILES} PROPERTIES COMPILE_FLAGS "-Wextra -Wpedantic -Wall")
+set_property(TARGET ${PROJECT_NAME} APPEND_STRING PROPERTY LINK_FLAGS "-Wl,--print-memory-usage")
 
 # Project defines.
 target_compile_definitions(${PROJECT_NAME} PUBLIC
     # Use ESP UART as alternative to debugging
     PICO_DEFAULT_UART=1
-    PICO_DEFAULT_UART_BAUD_RATE=115200
+    PICO_DEFAULT_UART_BAUD_RATE=230400
     PICO_DEFAULT_UART_TX_PIN=4
     PICO_DEFAULT_UART_RX_PIN=5
 )
