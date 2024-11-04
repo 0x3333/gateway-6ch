@@ -13,7 +13,7 @@
 #include "modbus.h"
 #include "messages.h"
 #include "esp.h"
-#include "cpu_usage.h"
+#include "res_usage.h"
 
 static void task_pio_uart_tx(void *arg);
 static void task_pio_uart_rx(void *arg);
@@ -75,11 +75,11 @@ int main()
 
     init_uart_maintenance_task();
     init_led_task();
-    init_cpu_usage_task();
+    init_res_usage_task();
 
-    xTaskCreate(task_comm_esp, "Comm-ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
-    xTaskCreate(task_pio_uart_tx, "UART-TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
-    xTaskCreate(task_pio_uart_rx, "UART-RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_comm_esp, "Comm ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_pio_uart_tx, "UART TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_pio_uart_rx, "UART RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
 
     printf("Running\n\n");
     vTaskStartScheduler();

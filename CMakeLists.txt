@@ -21,17 +21,18 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # If we want to print CPU/HEAP usage in the console
-add_definitions(-DSHOW_CPU_USAGE)
+add_definitions(-DSHOW_CPU_USAGE=0)
+add_definitions(-DSHOW_HEAP_USAGE=0)
 
 # Declare the source files.
 set(PROJECT_SRC_FILES
     src/main.c
-    src/cpu_usage.c
     src/crc.c
     src/esp.c
     src/led.c
     src/min_port.c
     src/modbus.c
+    src/res_usage.c
     src/uart.c
 )
 

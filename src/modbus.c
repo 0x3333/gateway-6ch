@@ -18,6 +18,7 @@ QueueHandle_t mb_bus_queue;
 void task_bus_manager(void *arg)
 {
     uint8_t bus = *((uint8_t *)arg);
+    (void)bus;
 
     while (true)
     {
@@ -31,16 +32,16 @@ enum mb_return
     MB_TIMEOUT = -2,
 };
 
-int32_t mb_send(uint8_t bus, uint8_t *payload, uint8_t payload_length)
-{
-    struct pio_uart *const uart = pio_uarts[bus];
+// int32_t mb_send(uint8_t bus, uint8_t *payload, uint8_t payload_length)
+// {
+// struct pio_uart *const uart = pio_uarts[bus];
 
-    pio_uart_write_bytes(uart, payload, payload_length);
+// pio_uart_write_bytes(uart, payload, payload_length);
 
-    // FIXME: Wait for transmittion to finish
+// // FIXME: Wait for transmittion to finish
 
-    uint8_t c;
-    size_t received_length = pio_uart_read(uart, &c, 1);
+// uint8_t c;
+// size_t received_length = pio_uart_read(uart, &c, 1);
 
-    return 0;
-}
+//     return 0;
+// }
