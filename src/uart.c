@@ -17,7 +17,6 @@
  *
  * We use 2 PIO state machines per UART channel.
  * By default, RX channel is located in PIO0(PIO_UART_RX_PIO), TX channel in PIO1(PIO_UART_TX_PIO).
- * TX channel is feed by DMA, RX channel is read to a FreeRTOS StreamBuffer.
  */
 
 #ifndef PIO_UART_RX_PIO
@@ -58,9 +57,11 @@ static void isr_pio_uart_tx_fifo(void);
 static void isr_pio_uart_rx(void);
 
 static void hw_uart_fill_tx_fifo(struct hw_uart *uart);
+static void hw_uart_fill_tx_fifo_from_isr(struct hw_uart *uart);
 static void hw_uart_tx_fifo_irq_enabled(struct hw_uart *uart, bool enabled);
 
 static void pio_uart_fill_tx_fifo(struct pio_uart *uart);
+static void pio_uart_fill_tx_fifo_from_isr(struct pio_uart *uart);
 static void pio_uart_tx_fifo_irq_enabled(struct pio_uart *uart, bool enabled);
 
 //
@@ -330,7 +331,7 @@ static void isr_hw_uart(void)
 
         if (hw_uart_is_tx_irq(uart))
         {
-            hw_uart_fill_tx_fifo(uart);
+            hw_uart_fill_tx_fifo_from_isr(uart);
 
             // if the StreamBuffer is empty, disable IRQ, no more data to send
             if (xStreamBufferIsEmpty(uart->super.tx_sbuffer))
@@ -368,7 +369,7 @@ static void isr_pio_uart_tx_fifo(void)
 
         if (pio_uart_is_writable(uart))
         {
-            pio_uart_fill_tx_fifo(uart);
+            pio_uart_fill_tx_fifo_from_isr(uart);
 
             if (xStreamBufferIsEmpty(uart->super.tx_sbuffer))
             {
@@ -407,9 +408,21 @@ static void isr_pio_uart_rx(void)
 
 static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 {
-    uint8_t data;
     while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
     {
+        uint8_t data;
+        if (xStreamBufferReceive(uart->super.tx_sbuffer, &data, 1, 0))
+        {
+            uart_putc_raw(uart->native_uart, data);
+        }
+    }
+}
+
+static inline void hw_uart_fill_tx_fifo_from_isr(struct hw_uart *uart)
+{
+    while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    {
+        uint8_t data;
         if (xStreamBufferReceiveFromISR(uart->super.tx_sbuffer, &data, 1, NULL))
         {
             uart_putc_raw(uart->native_uart, data);
@@ -419,10 +432,21 @@ static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 
 static inline void pio_uart_fill_tx_fifo(struct pio_uart *uart)
 {
-    uint8_t data;
-
     while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
     {
+        uint8_t data;
+        if (xStreamBufferReceive(uart->super.tx_sbuffer, &data, 1, 0))
+        {
+            pio_uart_putc(uart, data);
+        }
+    }
+}
+
+static inline void pio_uart_fill_tx_fifo_from_isr(struct pio_uart *uart)
+{
+    while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    {
+        uint8_t data;
         if (xStreamBufferReceiveFromISR(uart->super.tx_sbuffer, &data, 1, NULL))
         {
             pio_uart_putc(uart, data);
@@ -434,17 +458,13 @@ inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, s
 {
     if (size)
     {
-        taskDISABLE_INTERRUPTS();
-
         hw_uart_fill_tx_fifo(uart);
         hw_uart_tx_fifo_irq_enabled(uart, true);
 
         size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
+
         uart->super.tx_sbuffer_overrun |= (written != size);
-
         uart->super.activity = true;
-
-        taskENABLE_INTERRUPTS();
 
         return written;
     }
@@ -455,18 +475,14 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
 {
     if (size)
     {
-        taskDISABLE_INTERRUPTS();
-
         pio_uart_fill_tx_fifo(uart);
         pio_uart_tx_fifo_irq_enabled(uart, true);
 
         size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
-        uart->super.tx_sbuffer_overrun |= (written != size);
 
+        uart->super.tx_sbuffer_overrun |= (written != size);
         uart->tx_done = false;
         uart->super.activity = true;
-
-        taskENABLE_INTERRUPTS();
 
         return written;
     }
