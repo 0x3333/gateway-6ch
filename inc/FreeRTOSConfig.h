@@ -41,7 +41,7 @@
 #define configUSE_DAEMON_TASK_STARTUP_HOOK      0
 
 // Run time and task stats gathering related definitions.
-#ifdef DEBUG_BUILD
+#if defined(DEBUG_BUILD) || (SHOW_CPU_USAGE == 1)
 #define configGENERATE_RUN_TIME_STATS           1
 #define configRUN_TIME_COUNTER_TYPE             uint64_t
 #else
@@ -110,7 +110,7 @@
 #define tskDEFAULT_PRIORITY                     (configMAX_PRIORITIES / 2)
 #define tskLOW_PRIORITY                         (configMAX_PRIORITIES / 4)
 
-#ifdef DEBUG_BUILD
+#if defined(DEBUG_BUILD) || (SHOW_CPU_USAGE == 1)
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()
 extern uint64_t time_us_64(void);						                                // "hardware/timer.h"
 #define RUN_TIME_STAT_time_us_64Divider configTICK_RATE_HZ			                    // stat granularity is mS, same as Tick Rate

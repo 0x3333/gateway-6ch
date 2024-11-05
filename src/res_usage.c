@@ -23,7 +23,7 @@ static void task_res(void *arg)
         // Get current task states
         if (uxTaskGetSystemState(start_array, TASKS_ARRAY_SIZE, &start_run_time) == 0)
         {
-            printf("Failed CPU Usage Start");
+            printf("Failed CPU Usage Start!\n");
             continue;
         }
 
@@ -32,7 +32,7 @@ static void task_res(void *arg)
         // Get post delay task states
         if (uxTaskGetSystemState(end_array, TASKS_ARRAY_SIZE, &end_run_time) == 0)
         {
-            printf("Failed CPU Usage End");
+            printf("Failed CPU Usage End!\n");
             continue;
         }
 
@@ -40,7 +40,7 @@ static void task_res(void *arg)
         uint32_t total_elapsed_time = (end_run_time - start_run_time);
         if (total_elapsed_time == 0)
         {
-            printf("Failed CPU Usage Time");
+            printf("Failed CPU Usage Time!\n");
             continue;
         }
 
