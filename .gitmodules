@@ -7,3 +7,6 @@
 [submodule "deps/min"]
 	path = deps/min
 	url = git@github.com:min-protocol/min.git
+[submodule "deps/FreeRTOS-Kernel"]
+	path = deps/FreeRTOS-Kernel
+	url = git@github.com:raspberrypi/FreeRTOS-Kernel.git
