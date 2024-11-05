@@ -44,17 +44,19 @@ static void task_res(void *arg)
             continue;
         }
 
-        printf("| %-20s | %8s | %10s\n", "Task", "Run Time", "Percentage");
-        printf("| %-20s | %8s | %10s\n", "--------------------", "--------", "----------");
+        printf("| %-20s | %8s | %10s | %20s\n", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
+        printf("| %-20s | %8s | %10s | %20s\n", "--------------------", "--------", "----------", "---------------------");
         // Match each task in start_array to those in the end_array
         for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
         {
             int k = -1;
+            uint32_t highWaterMark;
             for (UBaseType_t j = 0; j < TASKS_ARRAY_SIZE; j++)
             {
                 if (start_array[i].xHandle != NULL && start_array[i].xHandle == end_array[j].xHandle)
                 {
                     k = j;
+                    highWaterMark = uxTaskGetStackHighWaterMark(start_array[i].xHandle);
                     // Mark that task have been matched by overwriting their handles
                     start_array[i].xHandle = NULL;
                     end_array[j].xHandle = NULL;
@@ -66,7 +68,8 @@ static void task_res(void *arg)
             {
                 uint32_t task_elapsed_time = end_array[k].ulRunTimeCounter - start_array[i].ulRunTimeCounter;
                 uint32_t percentage_time = (task_elapsed_time * 100UL) / (total_elapsed_time);
-                printf("| %-20s | %8" PRIu32 " | %9" PRIu32 "%%\n", start_array[i].pcTaskName, task_elapsed_time, percentage_time);
+                printf("| %-20s | %8" PRIu32 " | %9" PRIu32 "%% | %-20" PRIu32 " | \n",
+                       start_array[i].pcTaskName, task_elapsed_time, percentage_time, highWaterMark);
             }
         }
 
@@ -112,6 +115,6 @@ static void task_res(void *arg)
 void init_res_usage_task(void)
 {
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
-    xTaskCreate(task_res, "Res Stats", 2048, NULL, tskIDLE_PRIORITY + 2, NULL);
+    xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);
 #endif
 }

@@ -77,9 +77,9 @@ int main()
     init_led_task();
     init_res_usage_task();
 
-    xTaskCreate(task_comm_esp, "Comm ESP", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
-    xTaskCreate(task_pio_uart_tx, "UART TX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
-    xTaskCreate(task_pio_uart_rx, "UART RX", 1024, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_comm_esp, "Comm ESP", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_pio_uart_tx, "UART TX", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreate(task_pio_uart_rx, "UART RX", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
 
     printf("Running\n\n");
     vTaskStartScheduler();
