@@ -25,6 +25,7 @@
 #endif
 
 // Max number of PIO UARTs possible
+#define NUM_HW_UARTS NUM_UARTS
 #define NUM_PIO_UARTS ((size_t)(NUM_PIOS * NUM_PIO_STATE_MACHINES / 2))
 
 #define UART_TYPE(id) (id <= 3 ? "HW" : "PIO")
@@ -41,7 +42,7 @@
  */
 struct uart
 {
-    const uint32_t baudrate;
+    uint32_t baudrate;
 
     const uint rx_pin;
     const uint tx_pin;
@@ -78,23 +79,28 @@ struct pio_uart
 // Variables
 //
 
-// NULL Sentinel-terminated array with enabled Hardware UARTS
-extern struct hw_uart *hw_uarts[NUM_UARTS + 1];
-// NULL Sentinel-terminated array with enabled PIO UARTS
-extern struct pio_uart *pio_uarts[NUM_PIO_UARTS + 1];
-
-// ESP <> PICO Hardware UART
-extern struct hw_uart esp_uart;
+extern struct hw_uart *active_hw_uarts[NUM_HW_UARTS];
+extern struct pio_uart *active_pio_uarts[NUM_PIO_UARTS];
 
 //
-// RS485 UARTs
+// Hardware UARTs
+// Note: UART0 is not available in our board(No pin available)
 
-extern struct pio_uart pio_uart_bus_1; // In the default board, assigned to ESP
-extern struct pio_uart pio_uart_bus_2; // In the default board, assigned to ESP
-extern struct pio_uart pio_uart_bus_3;
-extern struct pio_uart pio_uart_bus_4;
-extern struct pio_uart pio_uart_bus_5;
-extern struct pio_uart pio_uart_bus_6;
+extern struct hw_uart hw_uart1;
+
+//
+// PIO UARTs
+
+extern struct pio_uart pio_uart_1; // In the default configuration, assigned to HOST
+extern struct pio_uart pio_uart_2; // In the default configuration, assigned to HOST
+extern struct pio_uart pio_uart_3;
+extern struct pio_uart pio_uart_4;
+extern struct pio_uart pio_uart_5;
+extern struct pio_uart pio_uart_6;
+
+extern struct pio_uart *pio_uarts[NUM_PIO_UARTS];
+
+// Used to inform the LED task that has been some activity in some UART.
 extern volatile bool uart_activity;
 
 //
@@ -112,9 +118,9 @@ void init_hw_uart(struct hw_uart *const uart);
 void init_pio_uart(struct pio_uart *const pio_uart);
 
 /**
- * Initialize the UART Maintenance Task
+ * Initialize the UART Maintenance
  */
-void init_uart_maintenance_task(void);
+void init_uart_maintenance(void);
 
 /**
  * Write data to a Hardware UART.

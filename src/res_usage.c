@@ -112,7 +112,7 @@ static void task_res(void *arg)
 }
 #endif
 
-void init_res_usage_task(void)
+void init_res_usage(void)
 {
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
     xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);

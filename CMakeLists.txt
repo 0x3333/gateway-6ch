@@ -27,11 +27,12 @@ add_definitions(-DSHOW_HEAP_USAGE=0)
 # Declare the source files.
 set(PROJECT_SRC_FILES
     src/main.c
+    src/bus.c
     src/crc.c
     src/esp.c
+    src/host.c
     src/led.c
     src/min_port.c
-    src/modbus.c
     src/res_usage.c
     src/uart.c
 )

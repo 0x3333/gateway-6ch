@@ -17,7 +17,9 @@ enum message_types
 // Configure call to enable a Bus
 struct m_config_bus
 {
-    uint8_t buses : 6; // LSB: 1 -> 6
+    uint8_t bus;
+    uint8_t _reserved[3];
+    uint32_t baudrate;
 } __attribute__((packed));
 
 //
@@ -34,7 +36,7 @@ struct m_mb_base
 
 //
 // Configure periodic reads
-struct p_config_mb_read
+struct m_config_mb_read
 {
     struct m_mb_base base; // Modbus base data
     uint16_t interval_ms;  // Interval in ms between reads
@@ -42,14 +44,14 @@ struct p_config_mb_read
 
 //
 // Issue a read
-struct p_mb_read
+struct m_mb_read
 {
     struct m_mb_base base; // Modbus base data
 } __attribute__((packed));
 
 //
 // Issue a write
-struct p_mb_write
+struct m_mb_write
 {
     struct m_mb_base base; // Modbus base data
     uint8_t data_length;   // Data length

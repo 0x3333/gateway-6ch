@@ -1,7 +1,29 @@
-#ifndef MODBUS_H_
-#define MODBUS_H_
+#ifndef HOST_H_
+#define HOST_H_
 
 #include <stdint.h>
+
+#include "uart.h"
+
+//
+// Defines
+
+#ifndef MB_SEND_WAIT_TIME
+#define MB_SEND_WAIT_TIME 30
+#endif
+
+#ifndef HOST_UART
+#define HOST_UART hw_uart1
+#endif
+
+//
+//
+
+enum mb_return
+{
+    MB_ERROR = -1,
+    MB_TIMEOUT = -2,
+};
 
 enum mb_function
 {
@@ -21,4 +43,6 @@ enum mb_function
 //     uint16_t crc;
 // } mb_frame_t;
 
-#endif // MODBUS_H_
+void init_host(void);
+
+#endif // HOST_H_
