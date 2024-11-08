@@ -5,7 +5,6 @@
 #include <FreeRTOS.h>
 #include "stream_buffer.h"
 
-#include "hardware/dma.h"
 #include "hardware/pio.h"
 #include "hardware/uart.h"
 
@@ -25,12 +24,48 @@
 #endif
 
 // Max number of PIO UARTs possible
-#define NUM_HW_UARTS NUM_UARTS
-#define NUM_PIO_UARTS ((size_t)(NUM_PIOS * NUM_PIO_STATE_MACHINES / 2))
+#define COUNT_HW_UARTS NUM_UARTS
+#define COUNT_PIO_UARTS 6u
+#define MAX_PIO_UARTS (NUM_PIOS * NUM_PIO_STATE_MACHINES / 2u)
 
-#define UART_TYPE(id) (id <= 3 ? "HW" : "PIO")
-#define UART_PIO_ID(id) (id << 2)
-#define UART_ID(id) (id <= 3 ? id : id >> 2)
+/*
+ * PIO UART
+ *
+ * We use 2 PIO state machines per UART channel.
+ * By default, RX channel is located in PIO0(PIO_UART_RX_PIO), TX channel in PIO1(PIO_UART_TX_PIO).
+ */
+
+#ifndef PIO_UART_RX_PIO
+#define PIO_UART_RX_PIO pio0
+#endif
+
+#ifndef PIO_UART_TX_PIO
+#define PIO_UART_TX_PIO pio1
+#endif
+
+#ifndef PIO_UART_RX_FIFO_IRQ_INDEX
+#define PIO_UART_RX_FIFO_IRQ_INDEX 0
+#endif
+
+#ifndef PIO_UART_TX_DONE_IRQ_INDEX
+#define PIO_UART_TX_DONE_IRQ_INDEX 0
+#endif
+
+#ifndef PIO_UART_TX_FIFO_IRQ_INDEX
+#define PIO_UART_TX_FIFO_IRQ_INDEX 1
+#endif
+
+#if PIO_UART_TX_DONE_IRQ_INDEX == PIO_UART_TX_FIFO_IRQ_INDEX
+#error PIO_UART_TX_DONE_IRQ_INDEX cannot be equal PIO_UART_TX_FIFO_IRQ_INDEX
+#endif
+
+#ifndef HW_UART_DEFAULT_BAUDRATE
+#define HW_UART_DEFAULT_BAUDRATE 230400
+#endif
+
+#ifndef PIO_UART_DEFAULT_BAUDRATE
+#define PIO_UART_DEFAULT_BAUDRATE 115200
+#endif
 
 //
 // Structures
@@ -38,10 +73,11 @@
 
 /**
  * Hardware UART ID: 0 ~ 2
- * PIO UART ID: 1 ~ 6 (shifted 2 bits left)
+ * PIO UART ID: 0 ~ 5
  */
 struct uart
 {
+    const char *type;
     uint32_t baudrate;
 
     const uint rx_pin;
@@ -79,8 +115,8 @@ struct pio_uart
 // Variables
 //
 
-extern struct hw_uart *active_hw_uarts[NUM_HW_UARTS];
-extern struct pio_uart *active_pio_uarts[NUM_PIO_UARTS];
+extern struct hw_uart *active_hw_uarts[COUNT_HW_UARTS];
+extern struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS];
 
 //
 // Hardware UARTs
@@ -91,14 +127,12 @@ extern struct hw_uart hw_uart1;
 //
 // PIO UARTs
 
+extern struct pio_uart pio_uart_0; // In the default configuration, assigned to HOST
 extern struct pio_uart pio_uart_1; // In the default configuration, assigned to HOST
-extern struct pio_uart pio_uart_2; // In the default configuration, assigned to HOST
+extern struct pio_uart pio_uart_2;
 extern struct pio_uart pio_uart_3;
 extern struct pio_uart pio_uart_4;
 extern struct pio_uart pio_uart_5;
-extern struct pio_uart pio_uart_6;
-
-extern struct pio_uart *pio_uarts[NUM_PIO_UARTS];
 
 // Used to inform the LED task that has been some activity in some UART.
 extern volatile bool uart_activity;

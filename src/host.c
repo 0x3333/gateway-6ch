@@ -15,7 +15,9 @@ static struct min_context min_ctx;
 void config_bus(struct m_config_bus *msg)
 {
     struct pio_uart *uart;
-    if (msg->bus == 1)
+    if (msg->bus == 0)
+        uart = &pio_uart_0;
+    else if (msg->bus == 1)
         uart = &pio_uart_1;
     else if (msg->bus == 2)
         uart = &pio_uart_2;
@@ -25,8 +27,6 @@ void config_bus(struct m_config_bus *msg)
         uart = &pio_uart_4;
     else if (msg->bus == 5)
         uart = &pio_uart_5;
-    else if (msg->bus == 6)
-        uart = &pio_uart_6;
     else
     {
         printf("Invalid Bus number %u!", msg->bus);
@@ -61,7 +61,7 @@ void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t
 {
     (void)port;
 
-    printf("ID: %u - Len: %zu: ", min_id, len_payload);
+    debug(min_id, len_payload);
     debug_array(min_payload, len_payload);
 
     switch (min_id)

@@ -1,6 +1,5 @@
-#include <string.h>
-#include <stdarg.h>
 #include <stdio.h>
+
 #include <FreeRTOS.h>
 #include <stream_buffer.h>
 #include <task.h>
@@ -10,50 +9,11 @@
 #include "debug.h"
 #include "time.h"
 
-// FIXME: Convert all Panic to some kind fo log in flash, so the watchdog could recovery the application, but the log will be stored.
-
-/*
- * PIO UART
- *
- * We use 2 PIO state machines per UART channel.
- * By default, RX channel is located in PIO0(PIO_UART_RX_PIO), TX channel in PIO1(PIO_UART_TX_PIO).
- */
-
-#ifndef PIO_UART_RX_PIO
-#define PIO_UART_RX_PIO pio0
-#endif
-
-#ifndef PIO_UART_TX_PIO
-#define PIO_UART_TX_PIO pio1
-#endif
-
-#ifndef PIO_UART_RX_FIFO_IRQ_INDEX
-#define PIO_UART_RX_FIFO_IRQ_INDEX 0
-#endif
-
-#ifndef PIO_UART_TX_DONE_IRQ_INDEX
-#define PIO_UART_TX_DONE_IRQ_INDEX 0
-#endif
-
-#ifndef PIO_UART_TX_FIFO_IRQ_INDEX
-#define PIO_UART_TX_FIFO_IRQ_INDEX 1
-#endif
-
-#if PIO_UART_TX_DONE_IRQ_INDEX == PIO_UART_TX_FIFO_IRQ_INDEX
-#error PIO_UART_TX_DONE_IRQ_INDEX cannot be equal PIO_UART_TX_FIFO_IRQ_INDEX
-#endif
-
-#ifndef HW_UART_DEFAULT_BAUDRATE
-#define HW_UART_DEFAULT_BAUDRATE 230400
-#endif
-
-#ifndef PIO_UART_DEFAULT_BAUDRATE
-#define PIO_UART_DEFAULT_BAUDRATE 115200
-#endif
-
 // PIO Programs
 #include "uart_tx.pio.h"
 #include "uart_rx.pio.h"
+
+// FIXME: Convert all errors/issues to some kind of log in flash, so the watchdog could recovery the application, but the log will be stored.
 
 //
 // Prototypes
@@ -77,6 +37,7 @@ static void pio_uart_tx_fifo_irq_enabled(struct pio_uart *uart, bool enabled);
 
 struct hw_uart hw_uart1 = {
     .super = {
+        .type = "HW",
         .baudrate = HW_UART_DEFAULT_BAUDRATE,
         .rx_pin = 5,
         .tx_pin = 4,
@@ -88,69 +49,75 @@ struct hw_uart hw_uart1 = {
 //
 // RS485 UARTs
 
-struct pio_uart pio_uart_1 = {
+struct pio_uart pio_uart_0 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 7,
         .tx_pin = 8,
-        .id = UART_PIO_ID(1),
+        .id = 0,
     },
     .en_pin = 9,
 };
 
-struct pio_uart pio_uart_2 = {
+struct pio_uart pio_uart_1 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 10,
         .tx_pin = 11,
-        .id = UART_PIO_ID(2),
+        .id = 1,
     },
     .en_pin = 12,
 };
 
-struct pio_uart pio_uart_3 = {
+struct pio_uart pio_uart_2 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 13,
         .tx_pin = 14,
-        .id = UART_PIO_ID(3),
+        .id = 2,
     },
     .en_pin = 15,
 };
 
-struct pio_uart pio_uart_4 = {
+struct pio_uart pio_uart_3 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 18,
         .tx_pin = 16,
-        .id = UART_PIO_ID(4),
+        .id = 3,
     },
     .en_pin = 17,
 };
 
-struct pio_uart pio_uart_5 = {
+struct pio_uart pio_uart_4 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 19,
         .tx_pin = 20,
-        .id = UART_PIO_ID(5),
+        .id = 4,
     },
     .en_pin = 21,
 };
 
-struct pio_uart pio_uart_6 = {
+struct pio_uart pio_uart_5 = {
     .super = {
+        .type = "PIO",
         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
         .rx_pin = 28,
         .tx_pin = 26,
-        .id = UART_PIO_ID(6),
+        .id = 5,
     },
     .en_pin = 27,
 };
 
-struct hw_uart *active_hw_uarts[NUM_HW_UARTS] = {NULL};
+struct hw_uart *active_hw_uarts[COUNT_HW_UARTS] = {NULL};
 
-struct pio_uart *active_pio_uarts[NUM_PIO_UARTS] = {NULL};
+struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS] = {NULL};
 
 volatile bool uart_activity;
 
@@ -282,7 +249,7 @@ static void isr_hw_uart(void)
     size_t size = 0;
     uint8_t data[UARTS_BUFFER_SIZE];
 
-    for (size_t i = 0; i < NUM_HW_UARTS; i++)
+    for (size_t i = 0; i < COUNT_HW_UARTS; i++)
     {
         if (active_hw_uarts[i] != NULL)
         {
@@ -332,7 +299,7 @@ static inline void pio_uart_tx_fifo_irq_enabled(struct pio_uart *uart, bool enab
 
 static void isr_pio_uart_tx_done(void)
 {
-    for (size_t i = 0; i < NUM_PIO_UARTS; i++)
+    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
     {
         if (active_pio_uarts[i] != NULL)
         {
@@ -349,7 +316,7 @@ static void isr_pio_uart_tx_done(void)
 
 static void isr_pio_uart_tx_fifo(void)
 {
-    for (size_t i = 0; i < NUM_PIO_UARTS; i++)
+    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
     {
         if (active_pio_uarts[i] != NULL)
         {
@@ -372,7 +339,7 @@ static void isr_pio_uart_rx(void)
 {
     size_t size = 0;
     uint8_t src[UARTS_BUFFER_SIZE];
-    for (size_t i = 0; i < NUM_PIO_UARTS; i++)
+    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
     {
         if (active_pio_uarts[i] != NULL)
         {
@@ -500,12 +467,12 @@ static inline void check_overrrun(struct uart *uart)
     {
         uart->rx_sbuffer_overrun = false;
 
-        printf("[WARN] %s UART %lu RX Overrun.\n", UART_TYPE(uart->id), UART_ID(uart->id));
+        printf("[WARN] %s UART %lu RX Overrun.\n", uart->type, uart->id);
     }
     if (uart->tx_sbuffer_overrun)
     {
         uart->tx_sbuffer_overrun = false;
-        printf("[WARN] %s UART %lu TX Overrun.\n", UART_TYPE(uart->id), UART_ID(uart->id));
+        printf("[WARN] %s UART %lu TX Overrun.\n", uart->type, uart->id);
     }
 }
 
@@ -517,7 +484,7 @@ static void task_uart_maintenance(void *arg)
     {
         //
         // Hardware UARTs
-        for (size_t i = 0; i < NUM_HW_UARTS; i++)
+        for (size_t i = 0; i < COUNT_HW_UARTS; i++)
         {
             if (active_hw_uarts[i] != NULL)
             {
@@ -531,7 +498,7 @@ static void task_uart_maintenance(void *arg)
         //
         // PIO UARTs
 
-        for (size_t i = 0; i < NUM_PIO_UARTS; i++)
+        for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
         {
             if (active_pio_uarts[i] != NULL)
             {
