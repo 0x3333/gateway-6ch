@@ -12,7 +12,6 @@
 #include "led.h"
 #include "host.h"
 #include "messages.h"
-#include "esp.h"
 #include "res_usage.h"
 
 int main()
@@ -50,10 +49,10 @@ int main()
     // Init Tasks
     printf("Creating tasks...\n");
 
-    init_uart_maintenance();
-    init_led();
-    init_host();
-    init_res_usage();
+    uart_maintenance_init();
+    led_init();
+    host_init();
+    res_usage_init();
 
     printf("Running\n\n");
     vTaskStartScheduler();

@@ -10,6 +10,8 @@
 #define TASKS_ARRAY_SIZE 20
 
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
+#warning This Resource Usage code has some issues, the code can crash !Use only if really necessary.
+
 static void task_res(void *arg)
 {
     (void)arg;
@@ -112,7 +114,7 @@ static void task_res(void *arg)
 }
 #endif
 
-void init_res_usage(void)
+void res_usage_init(void)
 {
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
     xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);

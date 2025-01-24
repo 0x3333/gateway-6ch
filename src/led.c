@@ -41,7 +41,7 @@ void task_led(void *arg)
     }
 }
 
-void init_led(void)
+void led_init(void)
 {
     xTaskCreate(task_led, "LED", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 }

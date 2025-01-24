@@ -68,7 +68,7 @@
 #endif
 
 //
-// Structures
+// Data Structures
 //
 
 /**
@@ -138,23 +138,40 @@ extern struct pio_uart pio_uart_5;
 extern volatile bool uart_activity;
 
 //
-// Functions
+// Prototypes
 //
 
 /**
  * Initialize a Hardware UART.
  */
-void init_hw_uart(struct hw_uart *const uart);
+void hw_uart_init(struct hw_uart *const uart);
 
 /**
  * Initialize a PIO UART.
  */
-void init_pio_uart(struct pio_uart *const pio_uart);
+void pio_uart_init(struct pio_uart *const pio_uart);
 
 /**
- * Initialize the UART Maintenance
+ * Return a PIO UART by its index.
  */
-void init_uart_maintenance(void);
+struct pio_uart *get_pio_uart_by_index(uint8_t index);
+
+/**
+ * Initialize the UART Maintenance Task.
+ */
+void uart_maintenance_init(void);
+
+/**
+ * Write data to a Hardware UART with timeout.
+ * The data bytes are copied into the Stream buffer.
+ */
+size_t hw_uart_write_bytes_timeout(struct hw_uart *const uart, const void *src, size_t size, TickType_t ticksToWait);
+
+/**
+ * Write data to a PIO UART with timeout.
+ * The data bytes are copied into the Stream buffer.
+ */
+size_t pio_uart_write_bytes_timeout(struct pio_uart *const uart, const void *src, size_t size, TickType_t ticksToWait);
 
 /**
  * Write data to a Hardware UART.
@@ -167,6 +184,18 @@ size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t s
  * The data bytes are copied into the Stream buffer.
  */
 size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src, size_t size);
+
+/**
+ * Read bytes from a Hardware UART with timeout.
+ * @return Number of bytes read. May not be equal to data_length.
+ */
+size_t hw_uart_read_bytes_timeout(struct hw_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait);
+
+/**
+ * Read bytes from a PIO UART with timeout.
+ * @return Number of bytes read. May not be equal to data_length.
+ */
+size_t pio_uart_read_bytes_timeout(struct pio_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait);
 
 /**
  * Read bytes from a Hardware UART.

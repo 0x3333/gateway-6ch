@@ -14,7 +14,7 @@ set(LIBS_PATH deps)
 
 set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-extras)
-set(FREERTOS_KERNEL_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/FreeRTOS-Kernel)
+set(NANOMODBUS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/nanoMODBUS)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG_BUILD)
@@ -24,17 +24,21 @@ endif()
 add_definitions(-DSHOW_CPU_USAGE=0)
 add_definitions(-DSHOW_HEAP_USAGE=0)
 
+# nanoMODBUS
+add_definitions(-DNMBS_SERVER_DISABLED=1)
+
 # Declare the source files.
 set(PROJECT_SRC_FILES
     src/main.c
     src/bus.c
     src/crc.c
-    src/esp.c
     src/host.c
     src/led.c
     src/min_port.c
+    src/messages.c
     src/res_usage.c
     src/uart.c
+    ${NANOMODBUS_PATH}/nanomodbus.c
 )
 
 # Declare the include paths.
@@ -42,6 +46,7 @@ set(PROJECT_INCLUDE_PATHS
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/src
     ${CMAKE_CURRENT_LIST_DIR}/inc
+    ${NANOMODBUS_PATH}
 )
 
 # Declare the libraries that will be linked in.
@@ -61,7 +66,7 @@ set(PROJECT_LINK_LIBRARIES
     #hardware_claim               # Pico hardware resource management.
     #hardware_clocks              # Pico hardware clocks.
     #hardware_divider             # Pico hardware divider.
-    hardware_dma                 # Pico DMA hardware.
+    #hardware_dma                 # Pico DMA hardware.
     #hardware_exception           # Pico hardware exception handlers.
     #hardware_flash               # Pico flash hardware.
     #hardware_gpio                # Pico GPIO hardware. Default.
