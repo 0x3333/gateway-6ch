@@ -26,6 +26,7 @@ add_definitions(-DSHOW_HEAP_USAGE=0)
 
 # nanoMODBUS
 add_definitions(-DNMBS_SERVER_DISABLED=1)
+# add_definitions(-DNMBS_DEBUG=1)
 
 # Declare the source files.
 set(PROJECT_SRC_FILES
@@ -38,6 +39,7 @@ set(PROJECT_SRC_FILES
     src/messages.c
     src/res_usage.c
     src/uart.c
+    src/ring_buffer.c
     ${NANOMODBUS_PATH}/nanomodbus.c
 )
 

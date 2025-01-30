@@ -1,53 +1,62 @@
-#include "host.h"
-
 #include <stdio.h>
 #include <inttypes.h>
+#include <string.h>
 #include <FreeRTOS.h>
 #include <task.h>
 #include <target/min.h>
 
-#include "uart.h"
-#include "messages.h"
-#include "bus.h"
+#include "host.h"
+
 #include "debug.h"
 
 static struct min_context min_ctx;
 
 //
-// Message Handlers
+// Message
 //
 
 void handle_m_config_bus(struct m_config_bus *msg)
 {
+    if (bus_get_context(msg->bus))
+    {
+        printf("Bus %" PRIu8 " already configured!\n", msg->bus);
+        return;
+    }
     printf("Configuring bus %" PRIu8 "...\n", msg->bus);
-    struct bus_context *bus_context = pvPortMalloc(sizeof(struct bus_context) + (msg->periodic_reads_size * sizeof(struct periodic_reads)));
 
     struct pio_uart *pio_uart = get_pio_uart_by_index(msg->bus);
     if (pio_uart == NULL || pio_uart->super.id != msg->bus)
     {
-        vPortFree(bus_context);
         printf("Invalid Bus number %" PRIu8 "!", msg->bus);
         return;
     }
+
+    // Calculate the size of all elements in the struct
+    size_t bus_context_size = sizeof(struct bus_context) +
+                              (sizeof(struct bus_periodic_read) * msg->periodic_reads_len);
+    struct bus_context *bus_context = pvPortMalloc(bus_context_size);
+    memset(bus_context, 0, bus_context_size);
 
     bus_context->pio_uart = pio_uart;
     bus_context->baudrate = msg->baudrate;
     bus_context->bus = msg->bus;
     bus_context->periodic_interval = msg->periodic_interval;
-    bus_context->periodic_reads_size = msg->periodic_reads_size;
-    for (size_t i = 0; i < bus_context->periodic_reads_size; i++)
+    bus_context->periodic_reads_len = msg->periodic_reads_len;
+    for (size_t i = 0; i < bus_context->periodic_reads_len; i++)
     {
-        printf("Periodic read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx8 "0x%" PRIx8 "\n ",
-               msg->periodic_reads[i].slave,
-               msg->periodic_reads[i].function,
-               msg->periodic_reads[i].address,
-               msg->periodic_reads[i].length);
-        bus_context->periodic_reads[i].slave = msg->periodic_reads[i].slave;
-        bus_context->periodic_reads[i].function = msg->periodic_reads[i].function;
-        bus_context->periodic_reads[i].address = msg->periodic_reads[i].address;
-        bus_context->periodic_reads[i].length = msg->periodic_reads[i].length;
-        bus_context->periodic_reads[i].last_run = 0;
+        struct bus_periodic_read *bus_pr = &bus_context->periodic_reads[i];
+        struct m_base *msg_pr = &msg->periodic_reads[i];
+
+        bus_pr->slave = msg_pr->slave;
+        bus_pr->function = msg_pr->function;
+        bus_pr->address = msg_pr->address;
+        bus_pr->length = msg_pr->length;
+        bus_pr->last_run = xTaskGetTickCount();
+        bus_pr->memory_map_size = bus_mb_function_to_map_size(bus_pr->function, bus_pr->length);
+        bus_pr->memory_map = pvPortMalloc(bus_pr->memory_map_size);
+        memset(bus_pr->memory_map, 0, bus_pr->memory_map_size);
     }
+    // printf("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
 
     bus_init(bus_context);
 }

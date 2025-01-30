@@ -6,7 +6,7 @@
 //
 
 #define LED_PIN_ACT 0
-#define LED_PIN_BUILDIN PICO_DEFAULT_LED_PIN
+#define LED_PIN_BUILTIN PICO_DEFAULT_LED_PIN
 
 void led_init(void);
 

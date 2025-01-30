@@ -162,18 +162,6 @@ struct pio_uart *get_pio_uart_by_index(uint8_t index);
 void uart_maintenance_init(void);
 
 /**
- * Write data to a Hardware UART with timeout.
- * The data bytes are copied into the Stream buffer.
- */
-size_t hw_uart_write_bytes_timeout(struct hw_uart *const uart, const void *src, size_t size, TickType_t ticksToWait);
-
-/**
- * Write data to a PIO UART with timeout.
- * The data bytes are copied into the Stream buffer.
- */
-size_t pio_uart_write_bytes_timeout(struct pio_uart *const uart, const void *src, size_t size, TickType_t ticksToWait);
-
-/**
  * Write data to a Hardware UART.
  * The data bytes are copied into the Stream buffer.
  */

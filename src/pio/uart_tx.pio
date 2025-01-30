@@ -86,6 +86,9 @@ static inline void pio_uart_puts_blocking(struct pio_uart *uart, const char *s)
     }
 }
 
+/**
+ * Teels if this PIO UART has space in the FIFO to write
+ */
 static inline bool pio_uart_is_writable(struct pio_uart *uart)
 {
     return !pio_sm_is_tx_fifo_full(uart->tx_pio, uart->tx_sm);

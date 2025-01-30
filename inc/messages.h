@@ -21,6 +21,8 @@ struct m_handler
     void (*handler)(const void *);
 };
 
+// *** Packed structs have fields ordered to optimize alignment ***
+
 //
 // Base struct for Modbus Messages
 struct m_base
@@ -35,10 +37,10 @@ struct m_base
 // Configure call to enable a Bus
 struct m_config_bus
 {
-    uint8_t bus;                 // From 0 to 5
-    uint8_t periodic_reads_size; // periodic_reads[] array size
-    uint16_t periodic_interval;  // The interval between periodic reads
     uint32_t baudrate;           // Bus baudrate
+    uint16_t periodic_interval;  // The interval between periodic reads
+    uint8_t bus;                 // From 0 to 5
+    uint8_t periodic_reads_len; // periodic_reads[] array size
     struct m_base periodic_reads[];
 } __attribute__((packed));
 
