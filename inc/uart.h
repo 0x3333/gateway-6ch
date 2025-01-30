@@ -2,8 +2,7 @@
 #define UART_H_
 
 #include <stdint.h>
-#include <FreeRTOS.h>
-#include "stream_buffer.h"
+#include "ring_buffer.h"
 
 #include "hardware/pio.h"
 #include "hardware/uart.h"
@@ -83,10 +82,10 @@ struct uart
     const uint rx_pin;
     const uint tx_pin;
 
-    StreamBufferHandle_t tx_sbuffer;  // TX Stream Buffer
-    volatile bool tx_sbuffer_overrun; // If the TX Stream Buffer has overrun
-    StreamBufferHandle_t rx_sbuffer;  // RX Stream Buffer
-    volatile bool rx_sbuffer_overrun; // If the RX Stream Buffer has overrun
+    ring_buffer_t tx_rbuffer;         // TX Ring Buffer
+    volatile bool tx_rbuffer_overrun; // If the TX Ring Buffer has overrun
+    ring_buffer_t rx_rbuffer;         // RX Ring Buffer
+    volatile bool rx_rbuffer_overrun; // If the RX Ring Buffer has overrun
     const uint32_t id;                // Used to identify this UART between all instances
 
     volatile bool activity; // If there is activity in this UART
@@ -172,18 +171,6 @@ size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t s
  * The data bytes are copied into the Stream buffer.
  */
 size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src, size_t size);
-
-/**
- * Read bytes from a Hardware UART with timeout.
- * @return Number of bytes read. May not be equal to data_length.
- */
-size_t hw_uart_read_bytes_timeout(struct hw_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait);
-
-/**
- * Read bytes from a PIO UART with timeout.
- * @return Number of bytes read. May not be equal to data_length.
- */
-size_t pio_uart_read_bytes_timeout(struct pio_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait);
 
 /**
  * Read bytes from a Hardware UART.

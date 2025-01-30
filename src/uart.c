@@ -1,7 +1,6 @@
 #include <stdio.h>
 
 #include <FreeRTOS.h>
-#include <stream_buffer.h>
 #include <task.h>
 
 #include "uart.h"
@@ -139,8 +138,13 @@ void hw_uart_init(struct hw_uart *const hw_uart)
     uart_set_hw_flow(hw_uart->native_uart, false, false);
     uart_set_format(hw_uart->native_uart, 8, 1, UART_PARITY_NONE);
     uart_set_fifo_enabled(hw_uart->native_uart, true);
-    hw_uart->super.tx_sbuffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, 1);
-    hw_uart->super.rx_sbuffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, 1);
+
+    // Initialize Ring Buffers
+    size_t buf_size = UARTS_BUFFER_SIZE * sizeof(uint8_t);
+    uint8_t *txbuf = pvPortMalloc(buf_size);
+    uint8_t *rxbuf = pvPortMalloc(buf_size);
+    ring_buffer_init(&hw_uart->super.tx_rbuffer, txbuf, buf_size);
+    ring_buffer_init(&hw_uart->super.rx_rbuffer, rxbuf, buf_size);
 
     // Enable IRQ but keep it off until the Queue is filled
     irq_set_exclusive_handler(UART_IRQ_NUM(hw_uart->native_uart), hw_uart_isr);
@@ -189,11 +193,16 @@ void pio_uart_init(struct pio_uart *const pio_uart)
     pio_uart->tx_sm = sm;
     uart_tx_program_init(pio_uart->tx_pio, pio_uart->tx_sm, (uint)tx_program_offset, pio_uart->super.tx_pin, pio_uart->en_pin, pio_uart->super.baudrate);
 
-    // Initialize TX/RX StreamBuffer
-    pio_uart->super.tx_sbuffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, 1);
+    // Initialize Ring Buffers
+    size_t buf_size = UARTS_BUFFER_SIZE * sizeof(uint8_t);
+    uint8_t *txbuf = pvPortMalloc(buf_size);
+    uint8_t *rxbuf = pvPortMalloc(buf_size);
+    ring_buffer_init(&pio_uart->super.tx_rbuffer, txbuf, buf_size);
+    ring_buffer_init(&pio_uart->super.rx_rbuffer, rxbuf, buf_size);
+
     pio_uart->tx_done = true;
-    pio_uart->super.rx_sbuffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, 1);
-    pio_uart->super.rx_sbuffer_overrun = false;
+    pio_uart->super.tx_rbuffer_overrun = false;
+    pio_uart->super.rx_rbuffer_overrun = false;
 
     // Initialize RX FIFO not empty IRQ
     if (!irq_get_exclusive_handler(rx_fifo_irq))
@@ -268,9 +277,6 @@ static inline void hw_uart_tx_fifo_irq_enabled(struct hw_uart *uart, bool tx_ena
 // Same for TX and RX
 static void hw_uart_isr(void)
 {
-    size_t size = 0;
-    uint8_t data[UARTS_BUFFER_SIZE];
-
     for (size_t i = 0; i < COUNT_HW_UARTS; i++)
     {
         if (active_hw_uarts[i] != NULL)
@@ -282,17 +288,12 @@ static void hw_uart_isr(void)
 
             if (hw_uart_is_rx_irq(uart))
             {
-                size = 0;
                 while (uart_is_readable(uart->native_uart))
                 {
                     // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
-                    data[size++] = (uint8_t)uart_get_hw(uart->native_uart)->dr;
-                }
-                if (size)
-                {
-                    size_t written = xStreamBufferSendFromISR(uart->super.rx_sbuffer, data, size, NULL);
-                    uart->super.rx_sbuffer_overrun |= written != size; // Check if we overrun the buffer
-
+                    uint8_t data = (uint8_t)uart_get_hw(uart->native_uart)->dr;
+                    bool ret = ring_buffer_put(&uart->super.rx_rbuffer, data);
+                    uart->super.rx_rbuffer_overrun |= !ret; // Check if we overrun the buffer
                     uart->super.activity = true;
                 }
             }
@@ -304,8 +305,8 @@ static void hw_uart_isr(void)
             {
                 hw_uart_fill_tx_fifo_from_isr(uart);
 
-                // if the StreamBuffer is empty, disable IRQ, no more data to send
-                if (xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+                // if the Ring Buffer is empty, disable IRQ, no more data to send
+                if (ring_buffer_is_empty(&uart->super.tx_rbuffer))
                 {
                     hw_uart_tx_fifo_irq_enabled(uart, false);
                 }
@@ -348,7 +349,7 @@ static void pio_uart_tx_fifo_isr(void)
             {
                 pio_uart_fill_tx_fifo_from_isr(uart);
 
-                if (xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+                if (ring_buffer_is_empty(&uart->super.tx_rbuffer))
                 {
                     pio_uart_tx_fifo_irq_enabled(uart, false);
                 }
@@ -359,24 +360,16 @@ static void pio_uart_tx_fifo_isr(void)
 
 static void pio_uart_rx_isr(void)
 {
-    size_t size = 0;
-    uint8_t buf[UARTS_BUFFER_SIZE];
     for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
     {
         if (active_pio_uarts[i] != NULL)
         {
             struct pio_uart *uart = active_pio_uarts[i];
-            size = 0;
             while (!pio_rx_empty(uart))
             {
-                buf[size++] = pio_rx_getc(uart);
-            }
-            if (size > 0)
-            {
-                // Check if we overrun the buffer
-                size_t written = xStreamBufferSendFromISR(uart->super.rx_sbuffer, buf, size, NULL);
-                uart->super.rx_sbuffer_overrun |= written != size;
-
+                uint8_t data = pio_rx_getc(uart);
+                bool ret = ring_buffer_put(&uart->super.rx_rbuffer, data);
+                uart->super.rx_rbuffer_overrun |= !ret;
                 uart->super.activity = true;
             }
         }
@@ -389,10 +382,10 @@ static void pio_uart_rx_isr(void)
 
 static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 {
-    while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    while (uart_is_writable(uart->native_uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
     {
         uint8_t data;
-        if (xStreamBufferReceive(uart->super.tx_sbuffer, &data, 1, 0))
+        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
         {
             uart_putc_raw(uart->native_uart, data);
         }
@@ -401,22 +394,24 @@ static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 
 static inline void hw_uart_fill_tx_fifo_from_isr(struct hw_uart *uart)
 {
-    while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    while (uart_is_writable(uart->native_uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
     {
         uint8_t data;
-        if (xStreamBufferReceiveFromISR(uart->super.tx_sbuffer, &data, 1, NULL))
+        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
         {
             uart_putc_raw(uart->native_uart, data);
         }
     }
 }
 
+// TODO: Verificar a questão do acesso dentro e fora de ISR
+
 static inline void pio_uart_fill_tx_fifo(struct pio_uart *uart)
 {
     uint8_t data;
-    while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    while (pio_uart_is_writable(uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
     {
-        if (xStreamBufferReceive(uart->super.tx_sbuffer, &data, 1, 0))
+        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
         {
             pio_uart_putc(uart, data);
         }
@@ -426,9 +421,9 @@ static inline void pio_uart_fill_tx_fifo(struct pio_uart *uart)
 static inline void pio_uart_fill_tx_fifo_from_isr(struct pio_uart *uart)
 {
     uint8_t data;
-    while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_sbuffer))
+    while (pio_uart_is_writable(uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
     {
-        if (xStreamBufferReceiveFromISR(uart->super.tx_sbuffer, &data, 1, NULL))
+        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
         {
             pio_uart_putc(uart, data);
         }
@@ -439,59 +434,69 @@ static inline void pio_uart_fill_tx_fifo_from_isr(struct pio_uart *uart)
 
 inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t size)
 {
-    if (size)
+    size_t written;
+    for (written = 0; written < size; written++)
     {
-        size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
-
+        bool ret = ring_buffer_put(&uart->super.tx_rbuffer, *((uint8_t *)src + written));
+        uart->super.tx_rbuffer_overrun |= !ret;
+    }
+    if (written)
+    {
         hw_uart_fill_tx_fifo(uart);
         hw_uart_tx_fifo_irq_enabled(uart, true);
 
-        uart->super.tx_sbuffer_overrun |= (written != size);
         uart->super.activity = true;
-
-        return written;
     }
-    return 0;
+
+    return written;
 }
 
 inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src, size_t size)
 {
-    if (size)
+    size_t written;
+    for (written = 0; written < size; written++)
     {
-        size_t written = xStreamBufferSend(uart->super.tx_sbuffer, src, size, 0);
-
+        bool ret = ring_buffer_put(&uart->super.tx_rbuffer, *((uint8_t *)src + written));
+        uart->super.tx_rbuffer_overrun |= !ret;
+    }
+    if (written)
+    {
         pio_uart_fill_tx_fifo(uart);
         pio_uart_tx_fifo_irq_enabled(uart, true);
 
-        uart->super.tx_sbuffer_overrun |= (written != size);
-        uart->tx_done = false;
         uart->super.activity = true;
-
-        return written;
     }
-    return 0;
+    return written;
 }
 
 // Read
 
-inline size_t hw_uart_read_bytes_timeout(struct hw_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait)
-{
-    return xStreamBufferReceive(uart->super.rx_sbuffer, dst, size, ticksToWait);
-}
-
-inline size_t pio_uart_read_bytes_timeout(struct pio_uart *const uart, void *dst, uint8_t size, TickType_t ticksToWait)
-{
-    return xStreamBufferReceive(uart->super.rx_sbuffer, dst, size, ticksToWait);
-}
+// TODO: Criar uma versão de gets and puts no ring buffer.
 
 inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size)
 {
-    return hw_uart_read_bytes_timeout(uart, dst, size, 0);
+    size_t read;
+    for (read = 0; read < size; read++)
+    {
+        if (!ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst + read))
+        {
+            break;
+        }
+    }
+    return read;
 }
 
 inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size)
 {
-    return pio_uart_read_bytes_timeout(uart, dst, size, 0);
+    size_t read;
+    for (read = 0; read < size; read++)
+    {
+        if (!ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst + read))
+        {
+            break;
+        }
+    }
+    return read;
 }
 
 //
@@ -499,15 +504,15 @@ inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_
 
 static inline void check_overrrun(struct uart *uart)
 {
-    if (uart->rx_sbuffer_overrun)
+    if (uart->rx_rbuffer_overrun)
     {
-        uart->rx_sbuffer_overrun = false;
+        uart->rx_rbuffer_overrun = false;
 
         printf("[WARN] %s UART %lu RX Overrun.\n", uart->type, uart->id);
     }
-    if (uart->tx_sbuffer_overrun)
+    if (uart->tx_rbuffer_overrun)
     {
-        uart->tx_sbuffer_overrun = false;
+        uart->tx_rbuffer_overrun = false;
         printf("[WARN] %s UART %lu TX Overrun.\n", uart->type, uart->id);
     }
 }

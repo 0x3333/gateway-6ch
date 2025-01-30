@@ -34,17 +34,21 @@ int32_t read_serial(uint8_t *buf, uint16_t count, int32_t byte_timeout_ms, void 
     TickType_t timeout_inc = pdMS_TO_TICKS(1);
     while (read < count)
     {
-        read += pio_uart_read_bytes_timeout(pio_uart, dst, count - read, timeout_inc);
+        read += pio_uart_read_bytes(pio_uart, dst, count - read);
         dst += read * sizeof(uint8_t);
 
         timeout -= timeout_inc;
-        if (timeout <= 0)
+        if (timeout > 0)
+        {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        else
         {
             break;
         }
     }
     if (read != count)
-        printf("Fail reading: %u of %u, RX: %u\n", read, count, xStreamBufferBytesAvailable(pio_uart->super.rx_sbuffer));
+        printf("Fail reading: %u of %u, RX: %u\n", read, count, ring_buffer_used_space(&pio_uart->super.rx_rbuffer));
     return read;
 }
 
