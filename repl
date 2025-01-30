@@ -1,3 +1,13 @@
 #!/bin/bash
 
-gcc repl.c && ./a.out; rm -f a.out
+# -Wno-unreachable-code-generic-assoc is needed for "debug.h"
+
+gcc \
+    -Wno-unreachable-code-generic-assoc \
+    -I"./inc" \
+    -o /tmp/repl \
+    repl.c &&
+    chmod 777 /tmp/repl &&
+    /tmp/repl
+
+rm -f /tmp/repl
