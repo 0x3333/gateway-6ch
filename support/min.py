@@ -1,5 +1,6 @@
 from struct import pack
 from binascii import crc32
+import argparse
 
 
 def int32_to_bytes(value: int) -> bytes:
@@ -59,25 +60,25 @@ def on_wire_bytes(frame: MINFrame) -> bytes:
     return bytes(stuffed)
 
 
-def create_packet():
+def create_packet(baudrate, interval, bus, slave, function, address, length):
     frame = MINFrame(
         0x01,
         bytes(
             [
-                0x00,
-                0xC2,
-                0x1,
-                0x00,  # Baud(32)
-                0x28,
-                0x00,  # Periodic Interval(16)
-                0x4,  # Bus(8)
-                0x1,  # pr_size(8)
-                0x33,  # Slave Address(8)
-                0x1,  # Function, read coils(8)
-                0x4,
-                0x0,  # Address(16)
-                0x10,
-                0x00,  # Length(16)
+                baudrate & 0xFF,  # Baud rate
+                (baudrate >> 8) & 0xFF,
+                (baudrate >> 16) & 0xFF,
+                (baudrate >> 24) & 0xFF,
+                interval & 0xFF,  # Periodic Interval(16)
+                (interval >> 8) & 0xFF,
+                bus,  # Bus(8)
+                0x1,  # array length(8)
+                slave,  # Slave Address(8)
+                function,  # Function, 1= read coils(8), 3= read hr
+                address & 0xFF,  # Address(16)
+                (address >> 8) & 0xFF,
+                length & 0xFF,  # Length(16)
+                (length >> 8) & 0xFF,
             ]
         ),
     )
@@ -86,7 +87,58 @@ def create_packet():
 
 
 def main():
-    print(bytes_to_hexstr(create_packet()))
+    """
+    Main function to generate a MIN frame packet.
+
+    This function parses command line arguments to generate a MIN frame packet
+    with the specified parameters.
+
+    Command line arguments:
+    --baudrate : int : Baud rate (32-bit integer)
+    --interval : int : Periodic interval (16-bit integer)
+    --bus      : int : Bus (8-bit integer)
+    --slave    : int : Slave address (8-bit integer)
+    --function : int : Function code (8-bit integer)
+    --address  : int : Address (16-bit integer)
+    --length   : int : Length (16-bit integer)
+
+    Example:
+    python min.py --baudrate 115200 --interval 1000 --bus 1 --slave 1 --function 3 --address 0 --length 2
+    """
+    parser = argparse.ArgumentParser(description="Generate MIN frame packet.")
+    parser.add_argument(
+        "--baudrate", type=int, required=True, help="Baud rate (32-bit integer)"
+    )
+    parser.add_argument(
+        "--interval", type=int, required=True, help="Periodic interval (16-bit integer)"
+    )
+    parser.add_argument("--bus", type=int, required=True, help="Bus (8-bit integer)")
+    parser.add_argument(
+        "--slave", type=int, required=True, help="Slave address (8-bit integer)"
+    )
+    parser.add_argument(
+        "--function", type=int, required=True, help="Function code (8-bit integer)"
+    )
+    parser.add_argument(
+        "--address", type=int, required=True, help="Address (16-bit integer)"
+    )
+    parser.add_argument(
+        "--length", type=int, required=True, help="Length (16-bit integer)"
+    )
+
+    args = parser.parse_args()
+
+    packet = create_packet(
+        args.baudrate,
+        args.interval,
+        args.bus,
+        args.slave,
+        args.function,
+        args.address,
+        args.length,
+    )
+
+    print(bytes_to_hexstr(packet))
 
 
 if __name__ == "__main__":
