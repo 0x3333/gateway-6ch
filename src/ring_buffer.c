@@ -53,3 +53,9 @@ inline uint8_t ring_buffer_used_space(ring_buffer_t *rb)
     }
     return rb->buffer_size - (rb->tail - rb->head);
 }
+
+inline void ring_buffer_clear(ring_buffer_t *rb)
+{
+    rb->head = 0;
+    rb->tail = 0;
+}

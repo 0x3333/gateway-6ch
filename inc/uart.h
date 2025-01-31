@@ -184,4 +184,14 @@ size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size);
  */
 size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size);
 
+/**
+ * Flush the RX of a Hardware UART.
+ */
+void hw_uart_flush_rx(struct hw_uart *const uart);
+
+/**
+ * Flush the RX of a PIO UART.
+ */
+void pio_uart_flush_rx(struct pio_uart *const uart);
+
 #endif // UART_H_

@@ -27,4 +27,6 @@ bool ring_buffer_is_full(ring_buffer_t *rb);
 
 uint8_t ring_buffer_used_space(ring_buffer_t *rb);
 
+void ring_buffer_clear(ring_buffer_t *rb);
+
 #endif // RING_BUFFER_H_

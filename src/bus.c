@@ -22,31 +22,19 @@ int32_t read_serial(uint8_t *buf, uint16_t count, int32_t byte_timeout_ms, void 
 {
     struct pio_uart *pio_uart = arg;
 
-    if (byte_timeout_ms == 0) // This is a flush
-    {
-        pio_uart_read_bytes(pio_uart, buf, count);
-        return 0;
-    }
-
     size_t read = 0;
-    uint8_t *dst = buf;
-    TickType_t timeout = pdMS_TO_TICKS((byte_timeout_ms));
+    TickType_t timeout = pdMS_TO_TICKS(byte_timeout_ms);
     TickType_t timeout_inc = pdMS_TO_TICKS(1);
-    while (read < count)
+    while (read < count && timeout > 0)
     {
-        read += pio_uart_read_bytes(pio_uart, dst, count - read);
-        dst += read * sizeof(uint8_t);
-
-        timeout -= timeout_inc;
-        if (timeout > 0)
+        read += pio_uart_read_bytes(pio_uart, buf + read, count - read);
+        if (read < count)
         {
             vTaskDelay(pdMS_TO_TICKS(1));
-        }
-        else
-        {
-            break;
+            timeout -= timeout_inc;
         }
     }
+
     if (read != count)
         printf("Fail reading: %u of %u, RX: %u\n", read, count, ring_buffer_used_space(&pio_uart->super.rx_rbuffer));
     return read;
@@ -58,6 +46,12 @@ int32_t write_serial(const uint8_t *buf, uint16_t count, int32_t byte_timeout_ms
     struct pio_uart *pio_uart = arg;
     size_t read = pio_uart_write_bytes(pio_uart, buf, count);
     return read;
+}
+
+void flush_serial(void *arg)
+{
+    struct pio_uart *pio_uart = arg;
+    pio_uart_flush_rx(pio_uart);
 }
 
 //
@@ -72,6 +66,7 @@ static void bus_task(void *arg)
     platform_conf.transport = NMBS_TRANSPORT_RTU;
     platform_conf.read = read_serial;
     platform_conf.write = write_serial;
+    platform_conf.flush = flush_serial;
 
     nmbs_t nmbs;
     nmbs_error err = nmbs_client_create(&nmbs, &platform_conf);

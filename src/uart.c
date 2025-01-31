@@ -291,6 +291,7 @@ static void hw_uart_isr(void)
                 while (uart_is_readable(uart->native_uart))
                 {
                     // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
+                    // TODO: Check if uart_is_readable is really a double call
                     uint8_t data = (uint8_t)uart_get_hw(uart->native_uart)->dr;
                     bool ret = ring_buffer_put(&uart->super.rx_rbuffer, data);
                     uart->super.rx_rbuffer_overrun |= !ret; // Check if we overrun the buffer
@@ -497,6 +498,28 @@ inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_
         }
     }
     return read;
+}
+
+// Flush
+
+inline void hw_uart_flush_rx(struct hw_uart *const uart)
+{
+    while (uart_is_readable(uart->native_uart))
+    {
+        // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
+        // TODO: Check if uart_is_readable is really a double call
+        uint8_t dummy = (uint8_t)uart_get_hw(uart->native_uart)->dr;
+    }
+    ring_buffer_clear(&uart->super.rx_rbuffer);
+}
+
+inline void pio_uart_flush_rx(struct pio_uart *const uart)
+{
+    while (!pio_rx_empty(uart))
+    {
+        pio_rx_getc(uart);
+    }
+    ring_buffer_clear(&uart->super.rx_rbuffer);
 }
 
 //
