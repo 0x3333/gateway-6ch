@@ -55,8 +55,8 @@ void handle_m_config_bus(struct m_config_bus *msg)
         bus_pr->memory_map_size = bus_mb_function_to_map_size(bus_pr->function, bus_pr->length);
         bus_pr->memory_map = pvPortMalloc(bus_pr->memory_map_size);
         memset(bus_pr->memory_map, 0, bus_pr->memory_map_size);
+        printf("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
     }
-    // printf("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
 
     bus_init(bus_context);
 }

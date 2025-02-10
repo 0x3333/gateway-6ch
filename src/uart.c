@@ -363,9 +363,10 @@ static void pio_uart_rx_isr(void)
 {
     for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
     {
-        if (active_pio_uarts[i] != NULL)
+        struct pio_uart *uart = active_pio_uarts[i];
+        if (uart != NULL &&
+            pio_interrupt_get(uart->rx_pio, uart->rx_sm))
         {
-            struct pio_uart *uart = active_pio_uarts[i];
             while (!pio_rx_empty(uart))
             {
                 uint8_t data = pio_rx_getc(uart);
@@ -373,6 +374,7 @@ static void pio_uart_rx_isr(void)
                 uart->super.rx_rbuffer_overrun |= !ret;
                 uart->super.activity = true;
             }
+            pio_interrupt_clear(uart->rx_pio, uart->rx_sm);
         }
     }
 }
@@ -508,7 +510,8 @@ inline void hw_uart_flush_rx(struct hw_uart *const uart)
     {
         // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
         // TODO: Check if uart_is_readable is really a double call
-        uint8_t dummy = (uint8_t)uart_get_hw(uart->native_uart)->dr;
+        volatile uint8_t dummy = (uint8_t)uart_get_hw(uart->native_uart)->dr;
+        (void)dummy;
     }
     ring_buffer_clear(&uart->super.rx_rbuffer);
 }
