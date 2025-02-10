@@ -19,7 +19,7 @@ void task_led_act(void *arg)
     gpio_init(LED_PIN_ACT);
     gpio_set_dir(LED_PIN_ACT, GPIO_OUT);
 
-    while (true)
+    for (;;) // Task infinite loop
     {
         // Act LED
         if (uart_activity)
@@ -46,7 +46,7 @@ void task_led_builtin(void *arg)
     gpio_init(LED_PIN_BUILTIN);
     gpio_set_dir(LED_PIN_BUILTIN, GPIO_OUT);
 
-    while (true)
+    for (;;) // Task infinite loop
     {
         gpio_xor_mask(1u << LED_PIN_BUILTIN);
         vTaskDelay(pdMS_TO_TICKS(LED_BUILTIN_DELAY / 2));

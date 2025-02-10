@@ -14,7 +14,6 @@ set(LIBS_PATH deps)
 
 set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-extras)
-set(NANOMODBUS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/nanoMODBUS)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DDEBUG_BUILD)
@@ -23,10 +22,6 @@ endif()
 # If we want to print CPU/HEAP usage in the console
 add_definitions(-DSHOW_CPU_USAGE=0)
 add_definitions(-DSHOW_HEAP_USAGE=0)
-
-# nanoMODBUS
-add_definitions(-DNMBS_SERVER_DISABLED=1)
-# add_definitions(-DNMBS_DEBUG=1)
 
 # Declare the source files.
 set(PROJECT_SRC_FILES
@@ -40,7 +35,6 @@ set(PROJECT_SRC_FILES
     src/res_usage.c
     src/uart.c
     src/ring_buffer.c
-    ${NANOMODBUS_PATH}/nanomodbus.c
 )
 
 # Declare the include paths.
@@ -48,7 +42,6 @@ set(PROJECT_INCLUDE_PATHS
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/src
     ${CMAKE_CURRENT_LIST_DIR}/inc
-    ${NANOMODBUS_PATH}
 )
 
 # Declare the libraries that will be linked in.

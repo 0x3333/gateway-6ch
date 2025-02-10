@@ -173,10 +173,22 @@ size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t s
 size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src, size_t size);
 
 /**
+ * Read a byte from a Hardware UART.
+ * @return If a byte has been read or not.
+ */
+bool hw_uart_read_byte(struct hw_uart *const uart, void *dst);
+
+/**
  * Read bytes from a Hardware UART.
  * @return Number of bytes read. May not be equal to data_length.
  */
 size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size);
+
+/**
+ * Read a byte from a PIO UART.
+ * @return If a byte has been read or not.
+ */
+bool pio_uart_read_byte(struct pio_uart *const uart, void *dst);
 
 /**
  * Read bytes from a PIO UART.

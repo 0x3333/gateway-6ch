@@ -474,7 +474,10 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
 
 // Read
 
-// TODO: Criar uma versão de gets and puts no ring buffer.
+inline bool hw_uart_read_byte(struct hw_uart *const uart, void *dst)
+{
+    return !ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst);
+}
 
 inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size)
 {
@@ -487,6 +490,11 @@ inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t 
         }
     }
     return read;
+}
+
+inline bool pio_uart_read_byte(struct pio_uart *const uart, void *dst)
+{
+    return !ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst);
 }
 
 inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size)
@@ -547,7 +555,7 @@ static void task_uart_maintenance(void *arg)
 {
     (void)arg;
 
-    while (true)
+    for (;;) // Task infinite loop
     {
         //
         // Hardware UARTs

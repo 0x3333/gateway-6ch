@@ -1,8 +1,12 @@
 #ifndef BUS_H_
 #define BUS_H_
 
+#include <FreeRTOS.h>
 #include "uart.h"
 #include "messages.h"
+#include "modbus.h"
+#include "modbus_framer.h"
+#include "modbus_parser.h"
 
 //
 // Defines
@@ -12,24 +16,13 @@
 #define BUS_TIMEOUT 50
 #endif
 
+#ifndef BUS_MODBUS_FRAME_BUFFER_SIZE
+#define BUS_MODBUS_FRAME_BUFFER_SIZE 64
+#endif
+
 //
 // Data Structures
 //
-
-enum mb_return
-{
-    MB_ERROR = -1,
-    MB_TIMEOUT = -2,
-};
-
-enum mb_function
-{
-    MB_FUNC_READ_COILS = 0x01,
-    MB_FUNC_WRITE_COILS = 0x0F,
-
-    MB_FUNC_READ_HOLDING_REGISTERS = 0x03,
-    MB_FUNC_WRITE_HOLDING_REGISTERS = 0x10,
-};
 
 struct bus_periodic_read
 {
@@ -60,14 +53,6 @@ void bus_init(struct bus_context *bus_cfg);
 
 struct bus_context *bus_get_context(uint8_t bus);
 
-/**
- * Convert a number of bits to it's byte size
- */
-size_t bits_to_bytes(size_t bits);
-
-/**
- * Get the array size for a Modbus function with len size.
- */
-size_t bus_mb_function_to_map_size(enum mb_function func, size_t len);
+void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct ModbusFrame *frame);
 
 #endif // BUS_H_

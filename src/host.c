@@ -1,15 +1,19 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
+#include <target/min.h>
 #include <FreeRTOS.h>
 #include <task.h>
-#include <target/min.h>
+#include <queue.h>
 
 #include "host.h"
+#include "modbus.h"
 
 #include "debug.h"
 
 static struct min_context min_ctx;
+
+QueueHandle_t host_change_queue;
 
 //
 // Message
@@ -52,7 +56,7 @@ void handle_m_config_bus(struct m_config_bus *msg)
         bus_pr->address = msg_pr->address;
         bus_pr->length = msg_pr->length;
         bus_pr->last_run = xTaskGetTickCount();
-        bus_pr->memory_map_size = bus_mb_function_to_map_size(bus_pr->function, bus_pr->length);
+        bus_pr->memory_map_size = modbus_function_return_size(bus_pr->function, bus_pr->length);
         bus_pr->memory_map = pvPortMalloc(bus_pr->memory_map_size);
         memset(bus_pr->memory_map, 0, bus_pr->memory_map_size);
         printf("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
@@ -94,13 +98,21 @@ static void task_host_handler(void *arg)
 {
     (void)arg;
 
-    uint8_t buffer[HOST_UART_BUFFER_SIZE] = {0};
+    struct modbus_change change;
+    uint8_t uart_read_buffer[HOST_UART_BUFFER_SIZE] = {0};
 
-    while (true)
+    for (;;) // Task infinite loop
     {
-        uint8_t count = hw_uart_read_bytes(&HOST_UART, &buffer, HOST_UART_BUFFER_SIZE);
+        uint8_t count = hw_uart_read_bytes(&HOST_UART, &uart_read_buffer, HOST_UART_BUFFER_SIZE);
+        min_poll(&min_ctx, uart_read_buffer, count);
 
-        min_poll(&min_ctx, buffer, count);
+        if (xQueueReceive(host_change_queue, &change, 0) == pdTRUE)
+        {
+            printf("Change: Slave %" PRIu8 " Address %" PRIu16 " Value %" PRIu16 "\n",
+                   change.slave_id, change.address, change.value);
+
+            // TODO: Send the change to the host
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -111,6 +123,8 @@ void host_init(void)
     hw_uart_init(&HOST_UART);
 
     min_init_context(&min_ctx, 0);
+
+    host_change_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct modbus_change));
 
     xTaskCreate(task_host_handler, "Host Handler", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
 }

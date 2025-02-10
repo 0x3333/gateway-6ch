@@ -1,7 +1,5 @@
 #include "ring_buffer.h"
 
-// TODO: Criar uma versão de gets and puts no ring buffer.
-
 void ring_buffer_init(ring_buffer_t *rb, uint8_t *buffer, uint8_t buffer_size)
 {
     rb->buffer = buffer;

@@ -1,6 +1,9 @@
 #ifndef HOST_H_
 #define HOST_H_
 
+#include <FreeRTOS.h>
+#include <queue.h>
+
 #include "uart.h"
 #include "bus.h"
 #include "messages.h"
@@ -17,9 +20,15 @@
 #define HOST_UART_BUFFER_SIZE (UARTS_BUFFER_SIZE / 2)
 #endif
 
+#ifndef HOST_QUEUE_LENGTH
+#define HOST_QUEUE_LENGTH 50
+#endif
+
 //
 // Prototypes
 //
+
+extern QueueHandle_t host_change_queue;
 
 void host_init(void);
 

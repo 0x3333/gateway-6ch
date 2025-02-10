@@ -57,6 +57,6 @@ int main()
     printf("Running\n\n");
     vTaskStartScheduler();
 
-    while (true)
+    for (;;) // Task infinite loop
         tight_loop_contents();
 }

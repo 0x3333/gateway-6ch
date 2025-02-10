@@ -16,7 +16,7 @@ static void task_res(void *arg)
 {
     (void)arg;
 
-    while (true)
+    for (;;) // Task infinite loop
     {
 #if SHOW_CPU_USAGE == 1
         static TaskStatus_t start_array[TASKS_ARRAY_SIZE], end_array[TASKS_ARRAY_SIZE];

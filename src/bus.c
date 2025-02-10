@@ -1,10 +1,15 @@
 #include <stdio.h>
-#include <FreeRTOS.h>
-#include <task.h>
-#include <nanomodbus.h>
+#include <string.h>
 
-#include "bus.h"
 #include "debug.h"
+#include "bus.h"
+#include "host.h"
+
+#include <task.h>
+
+// Tick helper functions
+#define NEXT_TIMEOUT(timeout) (xTaskGetTickCount() + pdMS_TO_TICKS(timeout))
+#define IS_EXPIRED(timeout) (xTaskGetTickCount() >= timeout)
 
 char *name[COUNT_PIO_UARTS] = {
     "Bus 1",
@@ -16,43 +21,18 @@ char *name[COUNT_PIO_UARTS] = {
 };
 
 static struct bus_context *bus_contexts[COUNT_PIO_UARTS] = {NULL};
-// TaskHandle_t taskHandlers[COUNT_PIO_UARTS] = {NULL};
 
-int32_t read_serial(uint8_t *buf, uint16_t count, int32_t byte_timeout_ms, void *arg)
-{
-    struct pio_uart *pio_uart = arg;
+// // Delay between loops, allow cmds to be processed
+// static const TickType_t LOOP_DELAY = 0; // 0 means yeld
+// // Delay after reading a module before reading the next one
+// static const TickType_t MODULE_DELAY = 0; // 0 means yeld
+// // Delay between reading all modules and starting again
+// static const TickType_t LOOP_MODULE_DELAY = 50; // This needs to be validated on hardware modules
 
-    size_t read = 0;
-    TickType_t timeout = pdMS_TO_TICKS(byte_timeout_ms);
-    TickType_t timeout_inc = pdMS_TO_TICKS(1);
-    while (read < count && timeout > 0)
-    {
-        read += pio_uart_read_bytes(pio_uart, buf + read, count - read);
-        if (read < count)
-        {
-            vTaskDelay(pdMS_TO_TICKS(1));
-            timeout -= timeout_inc;
-        }
-    }
-
-    if (read != count)
-        printf("Fail reading: %u of %u, RX: %u\n", read, count, ring_buffer_used_space(&pio_uart->super.rx_rbuffer));
-    return read;
-}
-
-int32_t write_serial(const uint8_t *buf, uint16_t count, int32_t byte_timeout_ms, void *arg)
-{
-    (void)byte_timeout_ms; // No timeouts on write, we have the bus
-    struct pio_uart *pio_uart = arg;
-    size_t read = pio_uart_write_bytes(pio_uart, buf, count);
-    return read;
-}
-
-void flush_serial(void *arg)
-{
-    struct pio_uart *pio_uart = arg;
-    pio_uart_flush_rx(pio_uart);
-}
+// After how many ms we will print the timeout message again
+static const TickType_t DELAY_TIMEOUT_MSG = 5000;
+// After how many ms we will print the timeout message again
+static const TickType_t TIMEOUT_RESPONSE = 50;
 
 //
 // Handle Bus management, sending and receiving modbus messages
@@ -61,55 +41,55 @@ static void bus_task(void *arg)
 {
     struct bus_context *bus_context = arg;
 
-    nmbs_platform_conf platform_conf;
-    nmbs_platform_conf_create(&platform_conf);
-    platform_conf.transport = NMBS_TRANSPORT_RTU;
-    platform_conf.read = read_serial;
-    platform_conf.write = write_serial;
-    platform_conf.flush = flush_serial;
+    uint8_t framer_frame[BUS_MODBUS_FRAME_BUFFER_SIZE];
+    size_t frame_size = 0;
+    struct ModbusParser parser;
+    struct ModbusFrame parser_frame;
+    uint8_t read_byte = 0xaa;
 
-    nmbs_t nmbs;
-    nmbs_error err = nmbs_client_create(&nmbs, &platform_conf);
-    if (err != NMBS_ERROR_NONE)
-    {
-        printf("Error creating Modbus client: %s\n", nmbs_strerror(err));
-        return;
-    }
+    TickType_t last_timeout = 0;
 
-    nmbs_set_platform_arg(&nmbs, bus_context->pio_uart);
-    nmbs_set_read_timeout(&nmbs, BUS_TIMEOUT);
-    nmbs_set_byte_timeout(&nmbs, BUS_TIMEOUT);
-
-    // Initialization
+    // UART Initialization
     if (bus_context->baudrate > 0)
     {
         bus_context->pio_uart->super.baudrate = bus_context->baudrate;
     }
     pio_uart_init(bus_context->pio_uart);
 
-    while (true)
+    // How long to wait between writing and reading(Using current baudrate, 10 bytes)
+    const TickType_t delay_write_read = pdMS_TO_TICKS(
+        ((100 * 1000000) / bus_context->pio_uart->super.baudrate + 999) / 1000);
+
+    for (;;) // Task infinite loop
     {
-        TickType_t currentTicks = xTaskGetTickCount();
+        TickType_t current_ticks = xTaskGetTickCount();
 
         // Handle Periodic reads
         // Iterate over all entries, and process them sequentially
         for (size_t i = 0; i < bus_context->periodic_reads_len; i++)
         {
             struct bus_periodic_read *p_read = &bus_context->periodic_reads[i];
-            if (currentTicks >= p_read->last_run + bus_context->periodic_interval)
+            if (current_ticks >= p_read->last_run + bus_context->periodic_interval)
             {
-                // printf("Periodic read %u on Bus %u\n", i, bus_context->bus);
+                printf("Periodic read %u on Bus %u\n", i, bus_context->bus);
 
-                nmbs_error err = NMBS_ERROR_NONE;
-                nmbs_set_destination_rtu_address(&nmbs, p_read->slave);
-                memset(p_read->memory_map, 0, p_read->memory_map_size);
-                if (p_read->function == MB_FUNC_READ_COILS)
+                if (p_read->function == MODBUS_FUNCTION_READ_COILS)
                 {
-                    err = nmbs_read_coils(&nmbs, p_read->address, p_read->length, p_read->memory_map);
+                    frame_size = modbus_create_read_coils_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
+                    if (frame_size == 0)
+                    {
+                        printf("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
+                        continue;
+                    }
                 }
-                else if (p_read->function == MB_FUNC_READ_HOLDING_REGISTERS)
+                else if (p_read->function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
                 {
-                    err = nmbs_read_holding_registers(&nmbs, p_read->address, p_read->length, (uint16_t *)p_read->memory_map);
+                    frame_size = modbus_create_read_holding_registers_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
+                    if (frame_size == 0)
+                    {
+                        printf("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
+                        continue;
+                    }
                 }
                 else
                 {
@@ -117,14 +97,74 @@ static void bus_task(void *arg)
                     continue;
                 }
 
-                if (err != NMBS_ERROR_NONE)
+                // Flush any remaining byte in the UART RX buffer
+                pio_uart_flush_rx(bus_context->pio_uart);
+                // Write the frame to the UART
+                pio_uart_write_bytes(bus_context->pio_uart, framer_frame, frame_size);
+
+                // Release the CPU until the frame is sent to UART and possibly the response is available
+                vTaskDelay(delay_write_read);
+
+                // Reset the parser
+                modbus_parser_reset(&parser);
+                // Get current tick, needed for the timeout
+                TickType_t timeout_max_tick = NEXT_TIMEOUT(TIMEOUT_RESPONSE);
+                while (true)
                 {
-                    printf("Failed to read Modbus on Bus %u, error %d.\n", bus_context->bus, err);
+                    // If there is no byte available, wait or timeout
+                    if (!pio_uart_read_byte(bus_context->pio_uart, &read_byte))
+                    {
+                        // Check if the timeout has expired
+                        if (IS_EXPIRED(timeout_max_tick))
+                        {
+                            if (IS_EXPIRED(last_timeout))
+                            {
+                                printf("Timeout on Bus:%u Slave:%d Addr:%d Tick:%lu\n",
+                                       bus_context->bus, p_read->slave, p_read->address, xTaskGetTickCount());
+
+                                last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
+                            }
+                            // Go to next module if timeout
+                            break; // while, process next module
+                        }
+                        // Release CPU until some byte arrive in the buffer
+                        vTaskDelay(pdMS_TO_TICKS(1));
+                        continue; // while, process next module
+                    }
+
+                    printf("Byte: %02X\n", read_byte);
+                    // Process parser result
+                    enum ModbusResult parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
+                    if (parser_status == MODBUS_ERROR)
+                    {
+                        printf("Bus %u error parsing frame for slave_id: %d, address: %d, length: %d\n",
+                               bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                        break; // while, process next module
+                    }
+                    else if (parser_status == MODBUS_COMPLETE)
+                    {
+                        if (parser_frame.function_code != p_read->function)
+                        {
+                            printf("Bus %u received frame with wrong function code for slave_id: %d, address: %d, length: %d\n",
+                                   bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                            break; // while, process next module
+                        }
+
+                        // Just for debug
+                        printf("Bus %u Received - Slave ID: %d, Address: %d, Length: %d, Values: ",
+                               bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                        for (size_t i = 0; i < parser_frame.data_size; i++)
+                        {
+                            printf("%02X ", parser_frame.data[i]);
+                        }
+                        printf("\n");
+                        // debug end
+
+                        process_modbus_response(bus_context->bus, p_read, &parser_frame);
+                        break; // while, process next module
+                    }
                 }
-                // else
-                // {
-                //     printf("OK\n");
-                // }
+
                 p_read->last_run = xTaskGetTickCount();
             }
         }
@@ -141,7 +181,7 @@ void bus_init(struct bus_context *bus_context)
     bus_contexts[bus_context->bus] = bus_context;
     BaseType_t result = xTaskCreate(bus_task,
                                     name[bus_context->bus],
-                                    configMINIMAL_STACK_SIZE,
+                                    configMINIMAL_STACK_SIZE * 4,
                                     bus_context,
                                     tskDEFAULT_PRIORITY,
                                     NULL);
@@ -157,16 +197,39 @@ struct bus_context *bus_get_context(uint8_t bus)
     return bus_contexts[bus];
 }
 
-size_t bits_to_bytes(size_t bits)
+void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct ModbusFrame *frame)
 {
-    return (bits + 7) / 8;
-}
+    static struct modbus_change change = {
+        .slave_id = 0,
+        .address = 0,
+        .value = 0,
+    };
 
-size_t bus_mb_function_to_map_size(enum mb_function func, size_t len)
-{
-    size_t ret = 0;
-    ret = func == MB_FUNC_READ_COILS || func == MB_FUNC_WRITE_COILS ? 1 :                            // Coils = 1bit
-              func == MB_FUNC_READ_HOLDING_REGISTERS || func == MB_FUNC_WRITE_HOLDING_REGISTERS ? 16 // Registers 16 bits
-                                                                                                : 0; // Fallback
-    return bits_to_bytes(ret * len);
+    // Compare received values from the last ones
+    for (size_t i = 0; i < frame->data_size; ++i)
+    {
+        uint8_t diff = frame->data[i] ^ p_read->memory_map[i];
+        if (diff)
+        {
+            for (uint8_t bit = 0; bit < 8; ++bit)
+            {
+                if (diff & (1 << bit))
+                {
+                    uint8_t value = (frame->data[i] & (1 << bit)) ? 1 : 0;
+                    change.bus = bus;
+                    change.slave_id = p_read->slave;
+                    change.address = i * 8 + bit;
+                    change.value = value;
+                    printf("Bus %u change detected - Slave ID: %d, Address: %02d = %d",
+                           bus, p_read->slave, change.address, change.value);
+                    if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
+                    {
+                        printf("Bus %u could not send change to queue, queue full!", bus);
+                    }
+                }
+            }
+        }
+    }
+    // Copy new read values to the last_values array
+    memcpy(p_read->memory_map, frame->data, frame->data_size);
 }
