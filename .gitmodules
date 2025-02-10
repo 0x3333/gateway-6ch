@@ -10,6 +10,3 @@
 [submodule "deps/FreeRTOS-Kernel"]
 	path = deps/FreeRTOS-Kernel
 	url = git@github.com:raspberrypi/FreeRTOS-Kernel.git
-[submodule "deps/nanoMODBUS"]
-	path = deps/nanoMODBUS
-	url = git@github.com:0x3333/nanoMODBUS.git
