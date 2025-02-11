@@ -73,6 +73,15 @@ static inline void modbus_parser_reset(struct ModbusParser *parser)
     parser->data_length = 0;
 }
 
+static bool is_valid_modbus_function(uint8_t functionCode)
+{
+    return (functionCode == 0x01 || // Read Coils
+            functionCode == 0x03 || // Read Holding Registers
+            functionCode == 0x05 || // Write Single Coil
+            functionCode == 0x06 || // Write Single Register
+            functionCode == 0x10);  // Write Multiple Registers
+}
+
 // Process a single byte
 static inline enum ModbusResult modbus_parser_process_byte(struct ModbusParser *parser,
                                                            struct ModbusFrame *frame,
@@ -84,14 +93,30 @@ static inline enum ModbusResult modbus_parser_process_byte(struct ModbusParser *
     {
     case WAIT_ADDRESS:
         frame->address = byte;
-        update_crc(&parser->crc, byte);
-        parser->state = WAIT_FUNCTION;
+        if (byte > 247)
+        {
+            ret = MODBUS_ERROR;
+            modbus_parser_reset(parser);
+        }
+        else
+        {
+            update_crc(&parser->crc, byte);
+            parser->state = WAIT_FUNCTION;
+        }
         break;
 
     case WAIT_FUNCTION:
         frame->function_code = byte;
-        update_crc(&parser->crc, byte);
-        parser->state = WAIT_LENGTH;
+        if (!is_valid_modbus_function(byte))
+        {
+            ret = MODBUS_ERROR;
+            modbus_parser_reset(parser);
+        }
+        else
+        {
+            update_crc(&parser->crc, byte);
+            parser->state = WAIT_LENGTH;
+        }
         break;
 
     case WAIT_LENGTH:

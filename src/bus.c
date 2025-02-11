@@ -137,16 +137,16 @@ static void bus_task(void *arg)
                     enum ModbusResult parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
                     if (parser_status == MODBUS_ERROR)
                     {
-                        printf("Bus %u error parsing frame for slave_id: %d, address: %d, length: %d\n",
-                               bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                        printf("Bus %u error parsing frame for Slave ID: %d, Address: %d\n",
+                               bus_context->bus, p_read->slave, p_read->address);
                         break; // while, process next module
                     }
                     else if (parser_status == MODBUS_COMPLETE)
                     {
                         if (parser_frame.function_code != p_read->function)
                         {
-                            printf("Bus %u received frame with wrong function code for slave_id: %d, address: %d, length: %d\n",
-                                   bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                            printf("Bus %u received frame with wrong function code for Slave ID: %d, Address: %d\n",
+                                   bus_context->bus, p_read->slave, p_read->address);
                             break; // while, process next module
                         }
 
@@ -167,6 +167,7 @@ static void bus_task(void *arg)
 
                 p_read->last_run = xTaskGetTickCount();
             }
+            vTaskDelay(pdMS_TO_TICKS(1));
         }
 
         // Handle arbitrary read/write
@@ -174,27 +175,6 @@ static void bus_task(void *arg)
 
         vTaskDelay(pdMS_TO_TICKS(1));
     }
-}
-
-void bus_init(struct bus_context *bus_context)
-{
-    bus_contexts[bus_context->bus] = bus_context;
-    BaseType_t result = xTaskCreate(bus_task,
-                                    name[bus_context->bus],
-                                    configMINIMAL_STACK_SIZE * 4,
-                                    bus_context,
-                                    tskDEFAULT_PRIORITY,
-                                    NULL);
-
-    if (result != pdPASS)
-    {
-        printf("Bus Task creation failed!");
-    }
-}
-
-struct bus_context *bus_get_context(uint8_t bus)
-{
-    return bus_contexts[bus];
 }
 
 void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct ModbusFrame *frame)
@@ -232,4 +212,25 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
     }
     // Copy new read values to the last_values array
     memcpy(p_read->memory_map, frame->data, frame->data_size);
+}
+
+void bus_init(struct bus_context *bus_context)
+{
+    bus_contexts[bus_context->bus] = bus_context;
+    BaseType_t result = xTaskCreate(bus_task,
+                                    name[bus_context->bus],
+                                    configMINIMAL_STACK_SIZE * 4,
+                                    bus_context,
+                                    tskDEFAULT_PRIORITY,
+                                    NULL);
+
+    if (result != pdPASS)
+    {
+        printf("Bus Task creation failed!");
+    }
+}
+
+struct bus_context *bus_get_context(uint8_t bus)
+{
+    return bus_contexts[bus];
 }

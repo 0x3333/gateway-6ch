@@ -2,7 +2,8 @@
 #define UART_H_
 
 #include <stdint.h>
-#include "ring_buffer.h"
+#include <FreeRTOS.h>
+#include <stream_buffer.h>
 
 #include "hardware/pio.h"
 #include "hardware/uart.h"
@@ -82,11 +83,11 @@ struct uart
     const uint rx_pin;
     const uint tx_pin;
 
-    ring_buffer_t tx_rbuffer;         // TX Ring Buffer
-    volatile bool tx_rbuffer_overrun; // If the TX Ring Buffer has overrun
-    ring_buffer_t rx_rbuffer;         // RX Ring Buffer
-    volatile bool rx_rbuffer_overrun; // If the RX Ring Buffer has overrun
-    const uint32_t id;                // Used to identify this UART between all instances
+    StreamBufferHandle_t tx_buffer;  // TX Buffer
+    volatile bool tx_buffer_overrun; // If the TX Buffer has overrun
+    StreamBufferHandle_t rx_buffer;  // RX Buffer
+    volatile bool rx_buffer_overrun; // If the RX Buffer has overrun
+    const uint32_t id;               // Used to identify this UART between all instances
 
     volatile bool activity; // If there is activity in this UART
 };
@@ -107,15 +108,16 @@ struct pio_uart
 
     PIO tx_pio;
     uint tx_sm;
-    volatile bool tx_done;
+    // volatile bool tx_done;
 };
 
 //
 // Variables
 //
 
-extern struct hw_uart *active_hw_uarts[COUNT_HW_UARTS];
-extern struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS];
+extern struct hw_uart *active_hw_uarts[COUNT_HW_UARTS + 1];
+// Null terminated array of PIO UARTs
+extern struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS + 1];
 
 //
 // Hardware UARTs
@@ -126,8 +128,8 @@ extern struct hw_uart hw_uart1;
 //
 // PIO UARTs
 
-extern struct pio_uart pio_uart_0; // In the default configuration, assigned to HOST
-extern struct pio_uart pio_uart_1; // In the default configuration, assigned to HOST
+extern struct pio_uart pio_uart_0;
+extern struct pio_uart pio_uart_1;
 extern struct pio_uart pio_uart_2;
 extern struct pio_uart pio_uart_3;
 extern struct pio_uart pio_uart_4;

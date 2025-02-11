@@ -34,7 +34,6 @@ set(PROJECT_SRC_FILES
     src/messages.c
     src/res_usage.c
     src/uart.c
-    src/ring_buffer.c
 )
 
 # Declare the include paths.

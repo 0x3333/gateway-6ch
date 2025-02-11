@@ -14,11 +14,13 @@
 
 // FIXME: Convert all errors/issues to some kind of log in flash, so the watchdog could recovery the application, but the log will be stored.
 
+#define NO_DELAY 0
+
 //
 // Prototypes
 static void hw_uart_isr(void);
 
-static void pio_uart_tx_done_isr(void);
+// static void pio_uart_tx_done_isr(void);
 static void pio_uart_tx_fifo_isr(void);
 
 static void pio_uart_rx_isr(void);
@@ -114,9 +116,9 @@ struct pio_uart pio_uart_5 = {
     .en_pin = 27,
 };
 
-struct hw_uart *active_hw_uarts[COUNT_HW_UARTS] = {NULL};
+struct hw_uart *active_hw_uarts[COUNT_HW_UARTS + 1] = {NULL};
 
-struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS] = {NULL};
+struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS + 1] = {NULL};
 
 volatile bool uart_activity;
 
@@ -124,10 +126,60 @@ volatile bool uart_activity;
 // UARTs Initialization
 //
 
+static ssize_t add_active_hw_uart(struct hw_uart *uart)
+{
+    size_t i;
+    for (i = 0; i < COUNT_HW_UARTS; i++)
+    {
+        if (active_hw_uarts[i] == NULL)
+        {
+            active_hw_uarts[i] = uart;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static ssize_t add_active_pio_uart(struct pio_uart *uart)
+{
+    size_t i;
+    for (i = 0; i < COUNT_PIO_UARTS; i++)
+    {
+        if (active_pio_uarts[i] == NULL)
+        {
+            active_pio_uarts[i] = uart;
+            return i;
+        }
+    }
+    return -1;
+}
+
+// This is *stupid*, we should create an array with the pio_uart_X variables.
+struct pio_uart *get_pio_uart_by_index(uint8_t index)
+{
+    switch (index)
+    {
+    case 0:
+        return &pio_uart_0;
+    case 1:
+        return &pio_uart_1;
+    case 2:
+        return &pio_uart_2;
+    case 3:
+        return &pio_uart_3;
+    case 4:
+        return &pio_uart_4;
+    case 5:
+        return &pio_uart_5;
+    default:
+        return NULL;
+    }
+}
+
 void hw_uart_init(struct hw_uart *const hw_uart)
 {
     // Add this UART to the active uart array
-    active_hw_uarts[hw_uart->super.id] = hw_uart;
+    add_active_hw_uart(hw_uart);
 
     // Initialize Hardware UART
     uart_init(hw_uart->native_uart, hw_uart->super.baudrate);
@@ -139,17 +191,14 @@ void hw_uart_init(struct hw_uart *const hw_uart)
     uart_set_format(hw_uart->native_uart, 8, 1, UART_PARITY_NONE);
     uart_set_fifo_enabled(hw_uart->native_uart, true);
 
-    // Initialize Ring Buffers
-    size_t buf_size = UARTS_BUFFER_SIZE * sizeof(uint8_t);
-    uint8_t *txbuf = pvPortMalloc(buf_size);
-    uint8_t *rxbuf = pvPortMalloc(buf_size);
-    ring_buffer_init(&hw_uart->super.tx_rbuffer, txbuf, buf_size);
-    ring_buffer_init(&hw_uart->super.rx_rbuffer, rxbuf, buf_size);
+    // Initialize Buffers
+    hw_uart->super.tx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
+    hw_uart->super.rx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
 
     // Enable IRQ but keep it off until the Queue is filled
+    hw_uart_tx_fifo_irq_enabled(hw_uart, false); //  Needs to be disabled...
     irq_set_exclusive_handler(UART_IRQ_NUM(hw_uart->native_uart), hw_uart_isr);
-    irq_set_enabled(UART_IRQ_NUM(hw_uart->native_uart), true);
-    hw_uart_tx_fifo_irq_enabled(hw_uart, false);
+    irq_set_enabled(UART_IRQ_NUM(hw_uart->native_uart), true); // ... then, enabled in the NVIC
 }
 
 void pio_uart_init(struct pio_uart *const pio_uart)
@@ -158,11 +207,11 @@ void pio_uart_init(struct pio_uart *const pio_uart)
     static int tx_program_offset = PICO_ERROR_GENERIC;
 
     static const enum irq_num_rp2040 rx_fifo_irq = PIO_IRQ_NUM(PIO_UART_RX_PIO, 0); // All RX use the same FIFO IRQ
-    static const enum irq_num_rp2040 tx_done_irq = PIO_IRQ_NUM(PIO_UART_TX_PIO, 0); // All TX use the same DONE IRQ
     static const enum irq_num_rp2040 tx_fifo_irq = PIO_IRQ_NUM(PIO_UART_TX_PIO, 1); // All TX use the same FIFO IRQ
+    // static const enum irq_num_rp2040 tx_done_irq = PIO_IRQ_NUM(PIO_UART_TX_PIO, 0); // All TX use the same DONE IRQ
 
     // Add this UART to the active uart array
-    active_pio_uarts[pio_uart->super.id] = pio_uart;
+    add_active_pio_uart(pio_uart);
 
     // Add program if not already
     if (rx_program_offset <= PICO_ERROR_GENERIC)
@@ -193,62 +242,40 @@ void pio_uart_init(struct pio_uart *const pio_uart)
     pio_uart->tx_sm = sm;
     uart_tx_program_init(pio_uart->tx_pio, pio_uart->tx_sm, (uint)tx_program_offset, pio_uart->super.tx_pin, pio_uart->en_pin, pio_uart->super.baudrate);
 
-    // Initialize Ring Buffers
-    size_t buf_size = UARTS_BUFFER_SIZE * sizeof(uint8_t);
-    uint8_t *txbuf = pvPortMalloc(buf_size);
-    uint8_t *rxbuf = pvPortMalloc(buf_size);
-    ring_buffer_init(&pio_uart->super.tx_rbuffer, txbuf, buf_size);
-    ring_buffer_init(&pio_uart->super.rx_rbuffer, rxbuf, buf_size);
+    // Initialize Buffers
+    pio_uart->super.tx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
+    pio_uart->super.rx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
 
-    pio_uart->tx_done = true;
-    pio_uart->super.tx_rbuffer_overrun = false;
-    pio_uart->super.rx_rbuffer_overrun = false;
+    // pio_uart->tx_done = true;
+    pio_uart->super.tx_buffer_overrun = false;
+    pio_uart->super.rx_buffer_overrun = false;
 
     // Initialize RX FIFO not empty IRQ
+    pio_set_irqn_source_enabled(pio_uart->rx_pio,
+                                PIO_UART_RX_FIFO_IRQ_INDEX,
+                                pis_sm0_rx_fifo_not_empty + pio_uart->rx_sm,
+                                true);
     if (!irq_get_exclusive_handler(rx_fifo_irq))
     {
         irq_set_exclusive_handler(rx_fifo_irq, pio_uart_rx_isr);
         irq_set_enabled(rx_fifo_irq, true);
     }
-    pio_set_irqn_source_enabled(pio_uart->rx_pio, PIO_UART_RX_FIFO_IRQ_INDEX, pis_sm0_rx_fifo_not_empty + pio_uart->rx_sm, true);
-
-    // Initialize TX Done IRQ
-    if (!irq_get_exclusive_handler(tx_done_irq))
-    {
-        irq_set_exclusive_handler(tx_done_irq, pio_uart_tx_done_isr);
-        irq_set_enabled(tx_done_irq, true);
-    }
-    pio_set_irqn_source_enabled(pio_uart->tx_pio, PIO_UART_TX_DONE_IRQ_INDEX, pis_interrupt0 + pio_uart->tx_sm, true);
 
     // Initialize TX FIFO not full IRQ
+    pio_uart_tx_fifo_irq_enabled(pio_uart, false); // Needs to be disabled...
     if (!irq_get_exclusive_handler(tx_fifo_irq))
     {
         irq_set_exclusive_handler(tx_fifo_irq, pio_uart_tx_fifo_isr);
-        irq_set_enabled(tx_fifo_irq, true);
+        irq_set_enabled(tx_fifo_irq, true); // ... then, enabled in the NVIC
     }
-    pio_uart_tx_fifo_irq_enabled(pio_uart, false);
-}
 
-// This is *stupid*, we should create an array with the pio_uart_X variables.
-struct pio_uart *get_pio_uart_by_index(uint8_t index)
-{
-    switch (index)
-    {
-    case 0:
-        return &pio_uart_0;
-    case 1:
-        return &pio_uart_1;
-    case 2:
-        return &pio_uart_2;
-    case 3:
-        return &pio_uart_3;
-    case 4:
-        return &pio_uart_4;
-    case 5:
-        return &pio_uart_5;
-    default:
-        return NULL;
-    }
+    // Initialize TX Done IRQ
+    // if (!irq_get_exclusive_handler(tx_done_irq))
+    // {
+    //     irq_set_exclusive_handler(tx_done_irq, pio_uart_tx_done_isr);
+    //     irq_set_enabled(tx_done_irq, true);
+    // }
+    // pio_set_irqn_source_enabled(pio_uart->tx_pio, PIO_UART_TX_DONE_IRQ_INDEX, pis_interrupt0 + pio_uart->tx_sm, true);
 }
 
 //
@@ -269,6 +296,15 @@ static inline bool hw_uart_is_rx_irq(struct hw_uart *uart)
     return irqFlags & (UART_UARTMIS_RXMIS_BITS | UART_UARTMIS_RTMIS_BITS);
 }
 
+static inline void hw_uart_clear_tx_irq(struct hw_uart *uart)
+{
+    uart_get_hw(uart->native_uart)->icr = UART_UARTICR_TXIC_BITS;
+}
+
+static inline void hw_uart_clear_rx_irq(struct hw_uart *uart)
+{
+    uart_get_hw(uart->native_uart)->icr = UART_UARTICR_RXIC_BITS | UART_UARTICR_RTIC_BITS;
+}
 static inline void hw_uart_tx_fifo_irq_enabled(struct hw_uart *uart, bool tx_enabled)
 {
     uart_set_irqs_enabled(uart->native_uart, true, tx_enabled);
@@ -277,40 +313,41 @@ static inline void hw_uart_tx_fifo_irq_enabled(struct hw_uart *uart, bool tx_ena
 // Same for TX and RX
 static void hw_uart_isr(void)
 {
-    for (size_t i = 0; i < COUNT_HW_UARTS; i++)
+    size_t i = 0;
+    while (active_hw_uarts[i] != NULL)
     {
-        if (active_hw_uarts[i] != NULL)
+        struct hw_uart *uart = active_hw_uarts[i];
+
+        //
+        // RX
+
+        if (hw_uart_is_rx_irq(uart))
         {
-            struct hw_uart *uart = active_hw_uarts[i];
+            hw_uart_clear_rx_irq(uart);
 
-            //
-            // RX
-
-            if (hw_uart_is_rx_irq(uart))
+            while (uart_is_readable(uart->native_uart))
             {
-                while (uart_is_readable(uart->native_uart))
-                {
-                    // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
-                    // TODO: Check if uart_is_readable is really a double call
-                    uint8_t data = (uint8_t)uart_get_hw(uart->native_uart)->dr;
-                    bool ret = ring_buffer_put(&uart->super.rx_rbuffer, data);
-                    uart->super.rx_rbuffer_overrun |= !ret; // Check if we overrun the buffer
-                    uart->super.activity = true;
-                }
+                // Read from the register, avoid double 'uart_is_readable' in 'uart_getc'
+                uint8_t data = (uint8_t)uart_get_hw(uart->native_uart)->dr;
+                bool ret = xStreamBufferSendFromISR(uart->super.rx_buffer, &data, 1, NULL);
+                uart->super.rx_buffer_overrun |= !ret; // Check if we overrun the buffer
+                uart->super.activity = true;
             }
+        }
 
-            //
-            // TX
+        //
+        // TX
 
-            if (hw_uart_is_tx_irq(uart))
+        if (hw_uart_is_tx_irq(uart))
+        {
+            hw_uart_clear_tx_irq(uart);
+
+            hw_uart_fill_tx_fifo_from_isr(uart);
+
+            // if the Buffer is empty, disable IRQ, no more data to send
+            if (xStreamBufferIsEmpty(uart->super.tx_buffer))
             {
-                hw_uart_fill_tx_fifo_from_isr(uart);
-
-                // if the Ring Buffer is empty, disable IRQ, no more data to send
-                if (ring_buffer_is_empty(&uart->super.tx_rbuffer))
-                {
-                    hw_uart_tx_fifo_irq_enabled(uart, false);
-                }
+                hw_uart_tx_fifo_irq_enabled(uart, false);
             }
         }
     }
@@ -318,42 +355,37 @@ static void hw_uart_isr(void)
 
 static inline void pio_uart_tx_fifo_irq_enabled(struct pio_uart *uart, bool enabled)
 {
-    pio_set_irqn_source_enabled(uart->tx_pio, PIO_UART_TX_FIFO_IRQ_INDEX, pis_sm0_tx_fifo_not_full + uart->tx_sm, enabled);
+    pio_set_irqn_source_enabled(uart->tx_pio,
+                                PIO_UART_TX_FIFO_IRQ_INDEX,
+                                pis_sm0_tx_fifo_not_full + uart->tx_sm,
+                                enabled);
 }
 
-static void pio_uart_tx_done_isr(void)
-{
-    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
-    {
-        if (active_pio_uarts[i] != NULL)
-        {
-            struct pio_uart *pio_uart = active_pio_uarts[i];
-
-            if (pio_interrupt_get(pio_uart->tx_pio, pio_uart->tx_sm))
-            {
-                pio_uart->tx_done = true;
-                pio_interrupt_clear(pio_uart->tx_pio, pio_uart->tx_sm);
-            }
-        }
-    }
-}
+// static void pio_uart_tx_done_isr(void)
+// {
+//     size_t i = 0;
+//     while (active_pio_uarts[i] != NULL)
+//     {
+//         if (pio_interrupt_get(active_pio_uarts[i]->tx_pio, active_pio_uarts[i]->tx_sm))
+//         {
+//             active_pio_uarts[i]->tx_done = true;
+//             pio_interrupt_clear(active_pio_uarts[i]->tx_pio, active_pio_uarts[i]->tx_sm);
+//         }
+//     }
+// }
 
 static void pio_uart_tx_fifo_isr(void)
 {
-    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
+    size_t i = 0;
+    while (active_pio_uarts[i] != NULL)
     {
-        if (active_pio_uarts[i] != NULL)
+        if (pio_uart_is_writable(active_pio_uarts[i]))
         {
-            struct pio_uart *uart = active_pio_uarts[i];
+            pio_uart_fill_tx_fifo_from_isr(active_pio_uarts[i]);
 
-            if (pio_uart_is_writable(uart))
+            if (xStreamBufferIsEmpty(active_pio_uarts[i]->super.tx_buffer))
             {
-                pio_uart_fill_tx_fifo_from_isr(uart);
-
-                if (ring_buffer_is_empty(&uart->super.tx_rbuffer))
-                {
-                    pio_uart_tx_fifo_irq_enabled(uart, false);
-                }
+                pio_uart_tx_fifo_irq_enabled(active_pio_uarts[i], false);
             }
         }
     }
@@ -361,20 +393,19 @@ static void pio_uart_tx_fifo_isr(void)
 
 static void pio_uart_rx_isr(void)
 {
-    for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
+    size_t i = 0;
+    while (active_pio_uarts[i] != NULL)
     {
-        struct pio_uart *uart = active_pio_uarts[i];
-        if (uart != NULL &&
-            pio_interrupt_get(uart->rx_pio, uart->rx_sm))
+        if (pio_interrupt_get(active_pio_uarts[i]->rx_pio, active_pio_uarts[i]->rx_sm))
         {
-            while (!pio_rx_empty(uart))
+            while (!pio_rx_empty(active_pio_uarts[i]))
             {
-                uint8_t data = pio_rx_getc(uart);
-                bool ret = ring_buffer_put(&uart->super.rx_rbuffer, data);
-                uart->super.rx_rbuffer_overrun |= !ret;
-                uart->super.activity = true;
+                uint8_t data = pio_rx_getc(active_pio_uarts[i]);
+                bool ret = xStreamBufferSendFromISR(active_pio_uarts[i]->super.rx_buffer, &data, 1, NULL);
+                active_pio_uarts[i]->super.rx_buffer_overrun |= !ret;
+                active_pio_uarts[i]->super.activity = true;
             }
-            pio_interrupt_clear(uart->rx_pio, uart->rx_sm);
+            pio_interrupt_clear(active_pio_uarts[i]->rx_pio, active_pio_uarts[i]->rx_sm);
         }
     }
 }
@@ -385,10 +416,10 @@ static void pio_uart_rx_isr(void)
 
 static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 {
-    while (uart_is_writable(uart->native_uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
+    while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
         uint8_t data;
-        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
+        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, NO_DELAY) == pdTRUE)
         {
             uart_putc_raw(uart->native_uart, data);
         }
@@ -397,24 +428,22 @@ static inline void hw_uart_fill_tx_fifo(struct hw_uart *uart)
 
 static inline void hw_uart_fill_tx_fifo_from_isr(struct hw_uart *uart)
 {
-    while (uart_is_writable(uart->native_uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
+    while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
         uint8_t data;
-        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
+        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL) == pdTRUE)
         {
             uart_putc_raw(uart->native_uart, data);
         }
     }
 }
 
-// TODO: Verificar a questão do acesso dentro e fora de ISR
-
 static inline void pio_uart_fill_tx_fifo(struct pio_uart *uart)
 {
     uint8_t data;
-    while (pio_uart_is_writable(uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
+    while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
-        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
+        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, NO_DELAY) == pdTRUE)
         {
             pio_uart_putc(uart, data);
         }
@@ -424,9 +453,9 @@ static inline void pio_uart_fill_tx_fifo(struct pio_uart *uart)
 static inline void pio_uart_fill_tx_fifo_from_isr(struct pio_uart *uart)
 {
     uint8_t data;
-    while (pio_uart_is_writable(uart) && !ring_buffer_is_empty(&uart->super.tx_rbuffer))
+    while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
-        if (ring_buffer_get(&uart->super.tx_rbuffer, &data))
+        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL) == pdTRUE)
         {
             pio_uart_putc(uart, data);
         }
@@ -440,8 +469,8 @@ inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, s
     size_t written;
     for (written = 0; written < size; written++)
     {
-        bool ret = ring_buffer_put(&uart->super.tx_rbuffer, *((uint8_t *)src + written));
-        uart->super.tx_rbuffer_overrun |= !ret;
+        bool ret = xStreamBufferSendFromISR(uart->super.tx_buffer, ((uint8_t *)src + written), 1, NULL);
+        uart->super.tx_buffer_overrun |= !ret;
     }
     if (written)
     {
@@ -459,10 +488,10 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
     size_t written;
     for (written = 0; written < size; written++)
     {
-        bool ret = ring_buffer_put(&uart->super.tx_rbuffer, *((uint8_t *)src + written));
-        uart->super.tx_rbuffer_overrun |= !ret;
+        bool ret = xStreamBufferSendFromISR(uart->super.tx_buffer, ((uint8_t *)src + written), 1, NULL);
+        uart->super.tx_buffer_overrun |= !ret;
     }
-    if (written)
+    if (!xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
         pio_uart_fill_tx_fifo(uart);
         pio_uart_tx_fifo_irq_enabled(uart, true);
@@ -476,7 +505,7 @@ inline size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src,
 
 inline bool hw_uart_read_byte(struct hw_uart *const uart, void *dst)
 {
-    return !ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst);
+    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, 1, NO_DELAY) != pdTRUE;
 }
 
 inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size)
@@ -484,7 +513,7 @@ inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t 
     size_t read;
     for (read = 0; read < size; read++)
     {
-        if (!ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst + read))
+        if (xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst + read, 1, NO_DELAY) != pdTRUE)
         {
             break;
         }
@@ -494,7 +523,7 @@ inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t 
 
 inline bool pio_uart_read_byte(struct pio_uart *const uart, void *dst)
 {
-    return !ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst);
+    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, 1, NO_DELAY) != pdTRUE;
 }
 
 inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size)
@@ -502,7 +531,7 @@ inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_
     size_t read;
     for (read = 0; read < size; read++)
     {
-        if (!ring_buffer_get(&uart->super.rx_rbuffer, (uint8_t *)dst + read))
+        if (xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst + read, 1, NO_DELAY) != pdTRUE)
         {
             break;
         }
@@ -521,7 +550,7 @@ inline void hw_uart_flush_rx(struct hw_uart *const uart)
         volatile uint8_t dummy = (uint8_t)uart_get_hw(uart->native_uart)->dr;
         (void)dummy;
     }
-    ring_buffer_clear(&uart->super.rx_rbuffer);
+    xStreamBufferReset(uart->super.rx_buffer);
 }
 
 inline void pio_uart_flush_rx(struct pio_uart *const uart)
@@ -530,23 +559,23 @@ inline void pio_uart_flush_rx(struct pio_uart *const uart)
     {
         pio_rx_getc(uart);
     }
-    ring_buffer_clear(&uart->super.rx_rbuffer);
+    xStreamBufferReset(uart->super.rx_buffer);
 }
 
 //
 // Maintenance Task
 
-static inline void check_overrrun(struct uart *uart)
+static inline void check_overrun(struct uart *uart)
 {
-    if (uart->rx_rbuffer_overrun)
+    if (uart->rx_buffer_overrun)
     {
-        uart->rx_rbuffer_overrun = false;
+        uart->rx_buffer_overrun = false;
 
         printf("[WARN] %s UART %lu RX Overrun.\n", uart->type, uart->id);
     }
-    if (uart->tx_rbuffer_overrun)
+    if (uart->tx_buffer_overrun)
     {
-        uart->tx_rbuffer_overrun = false;
+        uart->tx_buffer_overrun = false;
         printf("[WARN] %s UART %lu TX Overrun.\n", uart->type, uart->id);
     }
 }
@@ -563,7 +592,7 @@ static void task_uart_maintenance(void *arg)
         {
             if (active_hw_uarts[i] != NULL)
             {
-                check_overrrun(&active_hw_uarts[i]->super);
+                check_overrun(&active_hw_uarts[i]->super);
 
                 uart_activity |= active_hw_uarts[i]->super.activity;
                 active_hw_uarts[i]->super.activity = false;
@@ -573,15 +602,13 @@ static void task_uart_maintenance(void *arg)
         //
         // PIO UARTs
 
-        for (size_t i = 0; i < COUNT_PIO_UARTS; i++)
+        size_t i = 0;
+        while (active_pio_uarts[i] != NULL)
         {
-            if (active_pio_uarts[i] != NULL)
-            {
-                check_overrrun(&active_pio_uarts[i]->super);
+            check_overrun(&active_pio_uarts[i]->super);
 
-                uart_activity |= active_pio_uarts[i]->super.activity;
-                active_pio_uarts[i]->super.activity = false;
-            }
+            uart_activity |= active_pio_uarts[i]->super.activity;
+            active_pio_uarts[i]->super.activity = false;
         }
         vTaskDelay(pdMS_TO_TICKS(25));
     }
