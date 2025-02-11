@@ -5,8 +5,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <target/min.h>
-
-#include "debug.h"
+#include "macrologger.h"
 
 #include "uart.h"
 #include "led.h"
@@ -35,26 +34,26 @@ int main()
 #endif
 
     // Header
-    printf("\n");
-    printf("   ___   ____ ____  ___   ____   _____       __                         \n");
-    printf("  / _ \\ / __// / / ( _ ) / __/  / ___/___ _ / /_ ___  _    __ ___ _ __ __\n");
-    printf(" / , _/_\\ \\ /_  _// _  |/__ \\  / (_ // _ `// __// -_)| |/|/ // _ `// // /\n");
-    printf("/_/|_|/___/  /_/  \\___//____/  \\___/ \\_,_/ \\__/ \\__/ |__,__/ \\_,_/ \\_, / \n");
-    printf("                                                                  /___/  \n");
-    printf("By: Tercio Gaudencio Filho - %s %s\n\n", __DATE__, __TIME__);
+    LOG_INFO("\n");
+    LOG_INFO("   ___   ____ ____  ___   ____   _____       __                         \n");
+    LOG_INFO("  / _ \\ / __// / / ( _ ) / __/  / ___/___ _ / /_ ___  _    __ ___ _ __ __\n");
+    LOG_INFO(" / , _/_\\ \\ /_  _// _  |/__ \\  / (_ // _ `// __// -_)| |/|/ // _ `// // /\n");
+    LOG_INFO("/_/|_|/___/  /_/  \\___//____/  \\___/ \\_,_/ \\__/ \\__/ |__,__/ \\_,_/ \\_, / \n");
+    LOG_INFO("                                                                  /___/  \n");
+    LOG_INFO("By: Tercio Gaudencio Filho - %s %s\n\n", __DATE__, __TIME__);
 
     // Init Peripherals
-    printf("Initializing Peripherals...\n");
+    LOG_INFO("Initializing Peripherals...\n");
 
     // Init Tasks
-    printf("Creating tasks...\n");
+    LOG_INFO("Creating tasks...\n");
 
     uart_maintenance_init();
     led_init();
     host_init();
     res_usage_init();
 
-    printf("Running\n\n");
+    LOG_INFO("Running\n\n");
     vTaskStartScheduler();
 
     for (;;) // Task infinite loop

@@ -5,6 +5,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include "macrologger.h"
 
 #include "host.h"
 #include "modbus.h"
@@ -23,15 +24,15 @@ void handle_m_config_bus(struct m_config_bus *msg)
 {
     if (bus_get_context(msg->bus))
     {
-        printf("Bus %" PRIu8 " already configured!\n", msg->bus);
+        LOG_ERROR("Bus %" PRIu8 " already configured!\n", msg->bus);
         return;
     }
-    printf("Configuring bus %" PRIu8 "...\n", msg->bus);
+    LOG_INFO("Configuring bus %" PRIu8 "...\n", msg->bus);
 
     struct pio_uart *pio_uart = get_pio_uart_by_index(msg->bus);
     if (pio_uart == NULL || pio_uart->super.id != msg->bus)
     {
-        printf("Invalid Bus number %" PRIu8 "!", msg->bus);
+        LOG_ERROR("Invalid Bus number %" PRIu8 "!", msg->bus);
         return;
     }
 
@@ -59,7 +60,7 @@ void handle_m_config_bus(struct m_config_bus *msg)
         bus_pr->memory_map_size = modbus_function_return_size(bus_pr->function, bus_pr->length);
         bus_pr->memory_map = pvPortMalloc(bus_pr->memory_map_size);
         memset(bus_pr->memory_map, 0, bus_pr->memory_map_size);
-        printf("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
+        LOG_DEBUG("Bus PR read 0x%" PRIx8 " 0x%" PRIx8 " 0x%" PRIx16 " 0x%" PRIx16 "\n", bus_pr->slave, bus_pr->function, bus_pr->address, bus_pr->length);
     }
 
     bus_init(bus_context);
@@ -108,8 +109,8 @@ static void task_host_handler(void *arg)
 
         if (xQueueReceive(host_change_queue, &change, 0) == pdTRUE)
         {
-            printf("Change: Slave %" PRIu8 " Address %" PRIu16 " Value %" PRIu16 "\n",
-                   change.slave_id, change.address, change.value);
+            LOG_DEBUG("Change: Slave %" PRIu8 " Address %" PRIu16 " Value %" PRIu16 "\n",
+                      change.slave_id, change.address, change.value);
 
             // TODO: Send the change to the host
         }

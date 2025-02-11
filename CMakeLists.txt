@@ -16,12 +16,19 @@ set(PICO_SDK_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-sdk)
 set(PICO_EXTRAS_PATH ${CMAKE_CURRENT_LIST_DIR}/${LIBS_PATH}/pico-extras)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_definitions(-DDEBUG_BUILD)
+    add_definitions(-DLOG_LEVEL=DEBUG_LEVEL)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_definitions(-DLOG_LEVEL=ERROR_LEVEL)
 endif()
 
 # If we want to print CPU/HEAP usage in the console
 add_definitions(-DSHOW_CPU_USAGE=0)
 add_definitions(-DSHOW_HEAP_USAGE=0)
+
+if(SHOW_CPU_USAGE STREQUAL "1" OR SHOW_HEAP_USAGE STREQUAL "1")
+    add_definitions(-DDEBUG_BUILD)
+endif()
 
 # Declare the source files.
 set(PROJECT_SRC_FILES

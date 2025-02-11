@@ -53,6 +53,6 @@ void bus_init(struct bus_context *bus_cfg);
 
 struct bus_context *bus_get_context(uint8_t bus);
 
-void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct ModbusFrame *frame);
+void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct modbus_frame *frame);
 
 #endif // BUS_H_

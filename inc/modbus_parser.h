@@ -5,25 +5,8 @@
 #include <stddef.h>
 #include "modbus.h"
 
-//
-// Usage
-//
-
-// struct ModbusParser parser;
-// struct ModbusFrame frame;
-
-// modbus_parser_init(&parser);
-
-// // Process bytes as they arrive
-// enum ModbusResult result = modbus_parser_process_byte(&parser, incoming_byte, &frame);
-// if (result == MODBUS_COMPLETE) {
-//     // Frame is complete and valid
-// } else if (result == MODBUS_ERROR) {
-//     // Frame had a CRC error
-// }
-
 // Frame structure to store Modbus frame data
-struct ModbusFrame
+struct modbus_frame
 {
     uint8_t address;
     uint8_t function_code;
@@ -33,7 +16,7 @@ struct ModbusFrame
 };
 
 // Parser state enum
-enum ModbusParserState
+enum modbus_parser_state
 {
     WAIT_ADDRESS,
     WAIT_FUNCTION,
@@ -44,7 +27,7 @@ enum ModbusParserState
 };
 
 // Result enum
-enum ModbusResult
+enum modbus_result
 {
     MODBUS_ERROR,
     MODBUS_COMPLETE,
@@ -52,21 +35,21 @@ enum ModbusResult
 };
 
 // Parser context structure
-struct ModbusParser
+struct modbus_parser
 {
-    enum ModbusParserState state;
+    enum modbus_parser_state state;
     uint16_t crc;
     size_t data_length;
 };
 
 // Function to add data to frame
-static inline void modbus_frame_add_data(struct ModbusFrame *frame, uint8_t byte)
+static inline void modbus_frame_add_data(struct modbus_frame *frame, uint8_t byte)
 {
     frame->data[frame->data_size++] = byte;
 }
 
 // Reset parser
-static inline void modbus_parser_reset(struct ModbusParser *parser)
+static inline void modbus_parser_reset(struct modbus_parser *parser)
 {
     parser->state = WAIT_ADDRESS;
     parser->crc = 0xFFFF;
@@ -83,11 +66,11 @@ static bool is_valid_modbus_function(uint8_t functionCode)
 }
 
 // Process a single byte
-static inline enum ModbusResult modbus_parser_process_byte(struct ModbusParser *parser,
-                                                           struct ModbusFrame *frame,
-                                                           uint8_t byte)
+static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser *parser,
+                                                            struct modbus_frame *frame,
+                                                            uint8_t byte)
 {
-    enum ModbusResult ret = MODBUS_INCOMPLETE;
+    enum modbus_result ret = MODBUS_INCOMPLETE;
 
     switch (parser->state)
     {

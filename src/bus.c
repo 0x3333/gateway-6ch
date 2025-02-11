@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include "macrologger.h"
 
 #include "debug.h"
 #include "bus.h"
@@ -37,14 +38,37 @@ static const TickType_t TIMEOUT_RESPONSE = 50;
 //
 // Handle Bus management, sending and receiving modbus messages
 
+// static void bus_task2(void *arg)
+// {
+//     struct bus_context *bus_context = arg;
+
+//     uint8_t read_byte = 0xaa;
+
+//     // UART Initialization
+//     if (bus_context->baudrate > 0)
+//     {
+//         bus_context->pio_uart->super.baudrate = bus_context->baudrate;
+//     }
+//     pio_uart_init(bus_context->pio_uart);
+
+//     while (true)
+//     {
+//         while (pio_uart_read_byte(bus_context->pio_uart, &read_byte))
+//         {
+//             LOG_DEBUG("Read byte: %02X\n", read_byte);
+//         }
+//         vTaskDelay(pdMS_TO_TICKS(100));
+//     }
+// }
+
 static void bus_task(void *arg)
 {
     struct bus_context *bus_context = arg;
 
     uint8_t framer_frame[BUS_MODBUS_FRAME_BUFFER_SIZE];
     size_t frame_size = 0;
-    struct ModbusParser parser;
-    struct ModbusFrame parser_frame;
+    struct modbus_parser parser;
+    struct modbus_frame parser_frame;
     uint8_t read_byte = 0xaa;
 
     TickType_t last_timeout = 0;
@@ -71,14 +95,15 @@ static void bus_task(void *arg)
             struct bus_periodic_read *p_read = &bus_context->periodic_reads[i];
             if (current_ticks >= p_read->last_run + bus_context->periodic_interval)
             {
-                printf("Periodic read %u on Bus %u\n", i, bus_context->bus);
+                LOG_DEBUG("Periodic read %u on Bus %u\n", i, bus_context->bus);
+                last_timeout = 0;
 
                 if (p_read->function == MODBUS_FUNCTION_READ_COILS)
                 {
                     frame_size = modbus_create_read_coils_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
                     if (frame_size == 0)
                     {
-                        printf("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
+                        LOG_ERROR("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
                         continue;
                     }
                 }
@@ -87,13 +112,13 @@ static void bus_task(void *arg)
                     frame_size = modbus_create_read_holding_registers_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
                     if (frame_size == 0)
                     {
-                        printf("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
+                        LOG_ERROR("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
                         continue;
                     }
                 }
                 else
                 {
-                    printf("Invalid Modbus function %u on Bus %u.\n", p_read->function, bus_context->bus);
+                    LOG_ERROR("Invalid Modbus function %u on Bus %u.\n", p_read->function, bus_context->bus);
                     continue;
                 }
 
@@ -119,8 +144,8 @@ static void bus_task(void *arg)
                         {
                             if (IS_EXPIRED(last_timeout))
                             {
-                                printf("Timeout on Bus:%u Slave:%d Addr:%d Tick:%lu\n",
-                                       bus_context->bus, p_read->slave, p_read->address, xTaskGetTickCount());
+                                LOG_ERROR("Timeout on Bus:%u Slave:%d Addr:%d\n",
+                                          bus_context->bus, p_read->slave, p_read->address);
 
                                 last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
                             }
@@ -132,34 +157,33 @@ static void bus_task(void *arg)
                         continue; // while, process next module
                     }
 
-                    printf("Byte: %02X\n", read_byte);
                     // Process parser result
-                    enum ModbusResult parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
+                    enum modbus_result parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
                     if (parser_status == MODBUS_ERROR)
                     {
-                        printf("Bus %u error parsing frame for Slave ID: %d, Address: %d\n",
-                               bus_context->bus, p_read->slave, p_read->address);
+                        LOG_ERROR("Bus %u error parsing frame for Slave ID: %d, Address: %d\n",
+                                  bus_context->bus, p_read->slave, p_read->address);
                         break; // while, process next module
                     }
                     else if (parser_status == MODBUS_COMPLETE)
                     {
                         if (parser_frame.function_code != p_read->function)
                         {
-                            printf("Bus %u received frame with wrong function code for Slave ID: %d, Address: %d\n",
-                                   bus_context->bus, p_read->slave, p_read->address);
+                            LOG_ERROR("Bus %u received frame with wrong function code for Slave ID: %d, Address: %d\n",
+                                      bus_context->bus, p_read->slave, p_read->address);
                             break; // while, process next module
                         }
 
                         // Just for debug
-                        printf("Bus %u Received - Slave ID: %d, Address: %d, Length: %d, Values: ",
-                               bus_context->bus, p_read->slave, p_read->address, p_read->length);
-                        for (size_t i = 0; i < parser_frame.data_size; i++)
-                        {
-                            printf("%02X ", parser_frame.data[i]);
-                        }
-                        printf("\n");
+                        // LOG_DEBUG("Bus %u Received - Slave ID: %d, Address: %d, Length: %d, Values: ",
+                        //        bus_context->bus, p_read->slave, p_read->address, p_read->length);
+                        // for (size_t i = 0; i < parser_frame.data_size; i++)
+                        // {
+                        //     LOG_DEBUG("%02X ", parser_frame.data[i]);
+                        // }
                         // debug end
 
+                        // FIXME: Corrigir esta função para funcionar com qualquer tipo de resposta
                         process_modbus_response(bus_context->bus, p_read, &parser_frame);
                         break; // while, process next module
                     }
@@ -177,39 +201,63 @@ static void bus_task(void *arg)
     }
 }
 
-void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct ModbusFrame *frame)
+void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct modbus_frame *frame)
 {
+    // We reuse the same variable because it will be copied to the queue in case of a change
     static struct modbus_change change = {
         .slave_id = 0,
         .address = 0,
         .value = 0,
     };
 
-    // Compare received values from the last ones
-    for (size_t i = 0; i < frame->data_size; ++i)
+    size_t data_size = modbus_function_return_size(frame->function_code, 1);
+    if (frame->data_size % 2 != 0)
     {
-        uint8_t diff = frame->data[i] ^ p_read->memory_map[i];
-        if (diff)
+        LOG_ERROR("Error data size must be even");
+        return;
+    }
+
+    for (size_t byte = 0; byte < frame->data_size; ++byte)
+    {
+        uint8_t diff = frame->data[byte] ^ p_read->memory_map[byte]; // XOR to find if there is any change
+
+        if (diff) // If there is any change in the byte...
         {
-            for (uint8_t bit = 0; bit < 8; ++bit)
+            if (data_size == 16) // ...assume that the whole word changed
             {
-                if (diff & (1 << bit))
+                change.address = frame->address + byte / 2;
+                change.value = frame->data[byte] << 8 | frame->data[byte + 1];
+            }
+            else if (data_size == 1) // ...search for the bit that changed
+            {
+                for (uint8_t bit = 0; bit < 8; ++bit)
                 {
-                    uint8_t value = (frame->data[i] & (1 << bit)) ? 1 : 0;
-                    change.bus = bus;
-                    change.slave_id = p_read->slave;
-                    change.address = i * 8 + bit;
-                    change.value = value;
-                    printf("Bus %u change detected - Slave ID: %d, Address: %02d = %d",
-                           bus, p_read->slave, change.address, change.value);
-                    if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
+                    if (diff & (1 << bit)) // Change detected
                     {
-                        printf("Bus %u could not send change to queue, queue full!", bus);
+                        change.address = frame->address + (byte * 8 + bit);
+                        change.value = (frame->data[byte] & (1 << bit)) ? 1 : 0;
                     }
                 }
             }
+            else
+            {
+                LOG_ERROR("Invalid data_size %u on Bus %u.\n", data_size, bus);
+                return;
+            }
+
+            change.bus = bus;
+            change.slave_id = p_read->slave;
+            LOG_INFO("Bus %u change detected - Slave ID: %d, Address: %02d = %04X\n",
+                     bus, p_read->slave, change.address, change.value);
+            if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
+            {
+                LOG_ERROR("Bus %u could not send change to queue, queue full!", bus);
+            }
         }
+        if (data_size == 16)
+            byte++; // go to the next word
     }
+
     // Copy new read values to the last_values array
     memcpy(p_read->memory_map, frame->data, frame->data_size);
 }
@@ -217,6 +265,7 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
 void bus_init(struct bus_context *bus_context)
 {
     bus_contexts[bus_context->bus] = bus_context;
+
     BaseType_t result = xTaskCreate(bus_task,
                                     name[bus_context->bus],
                                     configMINIMAL_STACK_SIZE * 4,
@@ -226,7 +275,7 @@ void bus_init(struct bus_context *bus_context)
 
     if (result != pdPASS)
     {
-        printf("Bus Task creation failed!");
+        LOG_ERROR("Bus Task creation failed!");
     }
 }
 

@@ -108,7 +108,7 @@ struct pio_uart
 
     PIO tx_pio;
     uint tx_sm;
-    // volatile bool tx_done;
+    volatile bool tx_done;
 };
 
 //

@@ -3,6 +3,7 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <inttypes.h>
+#include "macrologger.h"
 
 #include "res_usage.h"
 
@@ -25,7 +26,7 @@ static void task_res(void *arg)
         // Get current task states
         if (uxTaskGetSystemState(start_array, TASKS_ARRAY_SIZE, &start_run_time) == 0)
         {
-            printf("Failed CPU Usage Start!\n");
+            LOG_ERROR("Failed CPU Usage Start!\n");
             continue;
         }
 
@@ -34,7 +35,7 @@ static void task_res(void *arg)
         // Get post delay task states
         if (uxTaskGetSystemState(end_array, TASKS_ARRAY_SIZE, &end_run_time) == 0)
         {
-            printf("Failed CPU Usage End!\n");
+            LOG_ERROR("Failed CPU Usage End!\n");
             continue;
         }
 
@@ -42,12 +43,12 @@ static void task_res(void *arg)
         uint32_t total_elapsed_time = (end_run_time - start_run_time);
         if (total_elapsed_time == 0)
         {
-            printf("Failed CPU Usage Time!\n");
+            LOG_ERROR("Failed CPU Usage Time!\n");
             continue;
         }
 
-        printf("| %-20s | %8s | %10s | %20s\n", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
-        printf("| %-20s | %8s | %10s | %20s\n", "--------------------", "--------", "----------", "---------------------");
+        LOG_INFO("| %-20s | %8s | %10s | %20s\n", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
+        LOG_INFO("| %-20s | %8s | %10s | %20s\n", "--------------------", "--------", "----------", "---------------------");
         // Match each task in start_array to those in the end_array
         for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
         {
@@ -70,8 +71,8 @@ static void task_res(void *arg)
             {
                 uint32_t task_elapsed_time = end_array[k].ulRunTimeCounter - start_array[i].ulRunTimeCounter;
                 uint32_t percentage_time = (task_elapsed_time * 100UL) / (total_elapsed_time);
-                printf("| %-20s | %8" PRIu32 " | %9" PRIu32 "%% | %-20" PRIu32 " | \n",
-                       start_array[i].pcTaskName, task_elapsed_time, percentage_time, highWaterMark);
+                LOG_INFO("| %-20s | %8" PRIu32 " | %9" PRIu32 "%% | %-20" PRIu32 " | \n",
+                         start_array[i].pcTaskName, task_elapsed_time, percentage_time, highWaterMark);
             }
         }
 
@@ -80,17 +81,17 @@ static void task_res(void *arg)
         {
             if (start_array[i].xHandle != NULL)
             {
-                printf("| %-20s | Deleted\n", start_array[i].pcTaskName);
+                LOG_INFO("| %-20s | Deleted\n", start_array[i].pcTaskName);
             }
         }
         for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
         {
             if (end_array[i].xHandle != NULL)
             {
-                printf("| %-20s | Created\n", end_array[i].pcTaskName);
+                LOG_INFO("| %-20s | Created\n", end_array[i].pcTaskName);
             }
         }
-        printf("\n");
+        LOG_INFO("\n");
 #endif
 #if SHOW_HEAP_USAGE == 1
 #if SHOW_CPU_USAGE != 1
@@ -101,14 +102,14 @@ static void task_res(void *arg)
         // Get Heap stats
         vPortGetHeapStats(&heap_stat);
 
-        printf("           Heap memory: %d (%dK)\n", configTOTAL_HEAP_SIZE, configTOTAL_HEAP_SIZE >> 10);
-        printf(" Available bytes total: %d (%dK)\n", heap_stat.xAvailableHeapSpaceInBytes, heap_stat.xAvailableHeapSpaceInBytes >> 10);
-        printf("         Largets block: %d (%dK)\n", heap_stat.xSizeOfLargestFreeBlockInBytes, heap_stat.xSizeOfLargestFreeBlockInBytes >> 10);
-        printf("        Smallest block: %d (%dK)\n", heap_stat.xSizeOfSmallestFreeBlockInBytes, heap_stat.xSizeOfSmallestFreeBlockInBytes >> 10);
-        printf("           Free blocks: %d\n", heap_stat.xNumberOfFreeBlocks);
-        printf("    Min free remaining: %d (%dK)\n", heap_stat.xMinimumEverFreeBytesRemaining, heap_stat.xMinimumEverFreeBytesRemaining >> 10);
-        printf("           Allocations: %d\n", heap_stat.xNumberOfSuccessfulAllocations);
-        printf("                 Frees: %d\n", heap_stat.xNumberOfSuccessfulFrees);
+        LOG_INFO("           Heap memory: %d (%dK)\n", configTOTAL_HEAP_SIZE, configTOTAL_HEAP_SIZE >> 10);
+        LOG_INFO(" Available bytes total: %d (%dK)\n", heap_stat.xAvailableHeapSpaceInBytes, heap_stat.xAvailableHeapSpaceInBytes >> 10);
+        LOG_INFO("         Largets block: %d (%dK)\n", heap_stat.xSizeOfLargestFreeBlockInBytes, heap_stat.xSizeOfLargestFreeBlockInBytes >> 10);
+        LOG_INFO("        Smallest block: %d (%dK)\n", heap_stat.xSizeOfSmallestFreeBlockInBytes, heap_stat.xSizeOfSmallestFreeBlockInBytes >> 10);
+        LOG_INFO("           Free blocks: %d\n", heap_stat.xNumberOfFreeBlocks);
+        LOG_INFO("    Min free remaining: %d (%dK)\n", heap_stat.xMinimumEverFreeBytesRemaining, heap_stat.xMinimumEverFreeBytesRemaining >> 10);
+        LOG_INFO("           Allocations: %d\n", heap_stat.xNumberOfSuccessfulAllocations);
+        LOG_INFO("                 Frees: %d\n", heap_stat.xNumberOfSuccessfulFrees);
 #endif
     }
 }
