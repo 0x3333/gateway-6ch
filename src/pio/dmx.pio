@@ -1,0 +1,65 @@
+; Author: Jostein Løwer, github: jostlowe
+; SPDX-License-Identifier: BSD-3-Clause
+; 
+; PIO program for outputting the DMX lighting protocol.
+; Compliant with ANSI E1.11-2008 (R2018)
+; The program assumes a PIO clock frequency of exactly 1MHz
+
+.program dmx
+.side_set 1 opt
+
+
+; Assert break condition
+    set x, 21   side 0     ; Preload bit counter, assert break condition for 176us 
+breakloop:                 ; This loop will run 22 times
+    jmp x-- breakloop [7]  ; Each loop iteration is 8 cycles.
+
+
+; Assert start condition
+    nop [7]    side 1      ; Assert MAB. 8 cycles nop and 8 cycles stop-bits = 16us
+
+
+; Send data frame
+.wrap_target
+    pull       side 1 [7]  ; Assert 2 stop bits, or stall with line in idle state
+    set x, 7   side 0 [3]  ; Preload bit counter, assert start bit for 4 clocks
+bitloop:                   ; This loop will run 8 times (8n1 UART)
+    out pins, 1            ; Shift 1 bit from OSR to the first OUT pin
+    jmp x-- bitloop   [2]  ; Each loop iteration is 4 cycles.
+.wrap
+
+% c-sdk {
+#include "hardware/pio.h"
+#include "hardware/dma.h"
+#include "hardware/clocks.h"
+
+#define DMX_SM_FREQ 1000000
+
+static inline void dmx_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint en_pin)
+{
+    // Set this pin's GPIO function (connect PIO to the pad)
+    pio_sm_set_pins_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
+    pio_sm_set_pindirs_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
+    pio_gpio_init(pio, tx_pin);
+
+    pio_gpio_init(pio, en_pin);
+    gpio_set_dir(en_pin, GPIO_OUT);
+    gpio_put(en_pin, 1);
+
+    // Generate the default PIO state machine config provided by pioasm
+    pio_sm_config c = dmx_program_get_default_config(offset);
+
+    // Setup the side-set pins for the PIO state machine
+    sm_config_set_out_pins(&c, tx_pin, 1);
+    sm_config_set_sideset_pins(&c, tx_pin);
+
+    // Setup the clock divider to run the state machine at exactly 1MHz
+    uint clk_div = clock_get_hz(clk_sys) / DMX_SM_FREQ;
+    sm_config_set_clkdiv(&c, clk_div);
+
+    // Load our configuration, jump to the start of the program and run the State Machine
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+%}

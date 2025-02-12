@@ -32,13 +32,14 @@ endif()
 
 # Declare the source files.
 set(PROJECT_SRC_FILES
-    src/main.c
     src/bus.c
     src/crc.c
+    src/dmx.c
     src/host.c
     src/led.c
-    src/min_port.c
+    src/main.c
     src/messages.c
+    src/min_port.c
     src/res_usage.c
     src/uart.c
 )
@@ -67,7 +68,7 @@ set(PROJECT_LINK_LIBRARIES
     #hardware_claim               # Pico hardware resource management.
     #hardware_clocks              # Pico hardware clocks.
     #hardware_divider             # Pico hardware divider.
-    #hardware_dma                 # Pico DMA hardware.
+    hardware_dma                  # Pico DMA hardware.
     #hardware_exception           # Pico hardware exception handlers.
     #hardware_flash               # Pico flash hardware.
     #hardware_gpio                # Pico GPIO hardware. Default.
@@ -107,6 +108,7 @@ set(PROJECT_USES_PIO 1)
 set(PROJECT_PIO_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/pio/uart_tx.pio
     ${CMAKE_CURRENT_LIST_DIR}/src/pio/uart_rx.pio
+    ${CMAKE_CURRENT_LIST_DIR}/src/pio/dmx.pio
 )
 
 # Miscellaneous options.

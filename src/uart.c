@@ -6,14 +6,9 @@
 
 #include "uart.h"
 
-#include "debug.h"
-#include "time.h"
-
 // PIO Programs
 #include "uart_tx.pio.h"
 #include "uart_rx.pio.h"
-
-// FIXME: Convert all errors/issues to some kind of log in flash, so the watchdog could recovery the application, but the log will be stored.
 
 #define NO_DELAY 0
 

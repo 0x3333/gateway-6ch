@@ -10,8 +10,6 @@
 #include "host.h"
 #include "modbus.h"
 
-#include "debug.h"
-
 static struct min_context min_ctx;
 
 QueueHandle_t host_change_queue;

@@ -115,6 +115,7 @@ struct pio_uart
 // Variables
 //
 
+// Null terminated array of Hardware UARTs
 extern struct hw_uart *active_hw_uarts[COUNT_HW_UARTS + 1];
 // Null terminated array of PIO UARTs
 extern struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS + 1];

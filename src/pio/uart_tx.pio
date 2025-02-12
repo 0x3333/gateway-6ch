@@ -33,15 +33,15 @@ bitloop:                     ; This loop will run 8 times (8n1 UART)
 #include "uart.h"
 #include "hardware/clocks.h"
 
-static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin_tx, uint pin_tx_en, uint baud)
+static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint en_pin, uint baud)
 {
     // Tell PIO to initially drive output-high on the selected pin, then map PIO
     // onto that pin with the IO muxes.
-    pio_sm_set_pins_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
-    pio_sm_set_pindirs_with_mask(pio, sm, 1u << pin_tx, 1u << pin_tx);
-    pio_gpio_init(pio, pin_tx);
-    pio_sm_set_consecutive_pindirs(pio, sm, pin_tx, 2, true);
-    pio_gpio_init(pio, pin_tx_en);
+    pio_sm_set_pins_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
+    pio_sm_set_pindirs_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
+    pio_gpio_init(pio, tx_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, tx_pin, 2, true);
+    pio_gpio_init(pio, en_pin);
 
     pio_sm_config c = uart_tx_program_get_default_config(offset);
 
@@ -51,11 +51,11 @@ static inline void uart_tx_program_init(PIO pio, uint sm, uint offset, uint pin_
     // We are mapping both OUT and side-set to the same pin, because sometimes
     // we need to assert user data onto the pin (with OUT) and sometimes
     // assert constant values (start/stop bit)
-    sm_config_set_out_pin_base(&c, pin_tx);
+    sm_config_set_out_pin_base(&c, tx_pin);
     sm_config_set_out_pin_count(&c, 1);
-    sm_config_set_set_pin_base(&c, pin_tx_en);
+    sm_config_set_set_pin_base(&c, en_pin);
     sm_config_set_set_pin_count(&c, 1);
-    sm_config_set_sideset_pin_base(&c, pin_tx);
+    sm_config_set_sideset_pin_base(&c, tx_pin);
 
     // We only need TX, so get an 8-deep FIFO!
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);

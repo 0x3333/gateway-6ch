@@ -4,7 +4,6 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
-#include "debug.h"
 #include "target/min.h"
 #include "host.h"
 
