@@ -42,7 +42,7 @@ static inline size_t bits_to_bytes(size_t bits)
 /**
  * Get a single return size for a determined function and length
  */
-static inline size_t modbus_function_return_size(enum modbus_function func, size_t len)
+static inline size_t modbus_function_register_size(enum modbus_function func)
 {
     size_t size = 0;
     switch (func)
@@ -59,7 +59,15 @@ static inline size_t modbus_function_return_size(enum modbus_function func, size
         size = 0; // Fallback
         break;
     }
-    return bits_to_bytes(size * len);
+    return size;
+}
+
+/**
+ * Get a single return size for a determined function and length
+ */
+static inline size_t modbus_function_return_size(enum modbus_function func, size_t len)
+{
+    return bits_to_bytes(modbus_function_register_size(func) * len);
 }
 
 //

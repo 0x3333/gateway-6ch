@@ -1,5 +1,6 @@
 #include <FreeRTOS.h>
 #include <task.h>
+#include "macrologger.h"
 
 #include "led.h"
 #include "uart.h"
@@ -55,6 +56,8 @@ void task_led_builtin(void *arg)
 
 void led_init(void)
 {
+    LOG_DEBUG("Initializing LED tasks...");
+
     xTaskCreate(task_led_act, "LED Act", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
     xTaskCreate(task_led_builtin, "LED Builtin", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 }

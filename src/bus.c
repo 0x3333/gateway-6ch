@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <string.h>
 #include "macrologger.h"
 
 #include "bus.h"
@@ -22,43 +20,10 @@ char *name[COUNT_PIO_UARTS] = {
 
 static struct bus_context *bus_contexts[COUNT_PIO_UARTS] = {NULL};
 
-// // Delay between loops, allow cmds to be processed
-// static const TickType_t LOOP_DELAY = 0; // 0 means yeld
-// // Delay after reading a module before reading the next one
-// static const TickType_t MODULE_DELAY = 0; // 0 means yeld
-// // Delay between reading all modules and starting again
-// static const TickType_t LOOP_MODULE_DELAY = 50; // This needs to be validated on hardware modules
-
 // After how many ms we will print the timeout message again
 static const TickType_t DELAY_TIMEOUT_MSG = 5000;
 // After how many ms we will print the timeout message again
 static const TickType_t TIMEOUT_RESPONSE = 50;
-
-//
-// Handle Bus management, sending and receiving modbus messages
-
-// static void bus_task2(void *arg)
-// {
-//     struct bus_context *bus_context = arg;
-
-//     uint8_t read_byte = 0xaa;
-
-//     // UART Initialization
-//     if (bus_context->baudrate > 0)
-//     {
-//         bus_context->pio_uart->super.baudrate = bus_context->baudrate;
-//     }
-//     pio_uart_init(bus_context->pio_uart);
-
-//     while (true)
-//     {
-//         while (pio_uart_read_byte(bus_context->pio_uart, &read_byte))
-//         {
-//             LOG_DEBUG("Read byte: %02X\n", read_byte);
-//         }
-//         vTaskDelay(pdMS_TO_TICKS(100));
-//     }
-// }
 
 static void bus_task(void *arg)
 {
@@ -94,35 +59,30 @@ static void bus_task(void *arg)
             struct bus_periodic_read *p_read = &bus_context->periodic_reads[i];
             if (current_ticks >= p_read->last_run + bus_context->periodic_interval)
             {
-                LOG_DEBUG("Periodic read %u on Bus %u\n", i, bus_context->bus);
+                LOG_DEBUG("Bus %u Periodic read %u", bus_context->bus, i);
                 last_timeout = 0;
 
                 if (p_read->function == MODBUS_FUNCTION_READ_COILS)
                 {
                     frame_size = modbus_create_read_coils_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
-                    if (frame_size == 0)
-                    {
-                        LOG_ERROR("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
-                        continue;
-                    }
                 }
                 else if (p_read->function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
                 {
                     frame_size = modbus_create_read_holding_registers_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
-                    if (frame_size == 0)
-                    {
-                        LOG_ERROR("Could not create Modbus Frame on Bus %u.\n", bus_context->bus);
-                        continue;
-                    }
                 }
                 else
                 {
-                    LOG_ERROR("Invalid Modbus function %u on Bus %u.\n", p_read->function, bus_context->bus);
+                    LOG_ERROR("Bus %u Invalid Modbus function %u", bus_context->bus, p_read->function);
+                    continue;
+                }
+                if (frame_size == 0)
+                {
+                    LOG_ERROR("Bus %u Could not create Modbus Frame", bus_context->bus);
                     continue;
                 }
 
                 // Flush any remaining byte in the UART RX buffer
-                pio_uart_flush_rx(bus_context->pio_uart);
+                pio_uart_rx_flush(bus_context->pio_uart);
                 // Write the frame to the UART
                 pio_uart_write_bytes(bus_context->pio_uart, framer_frame, frame_size);
 
@@ -143,7 +103,7 @@ static void bus_task(void *arg)
                         {
                             if (IS_EXPIRED(last_timeout))
                             {
-                                LOG_ERROR("Timeout on Bus:%u Slave:%d Addr:%d\n",
+                                LOG_ERROR("Bus:%u Timeout on Slave: %d Addr: %d",
                                           bus_context->bus, p_read->slave, p_read->address);
 
                                 last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
@@ -160,7 +120,7 @@ static void bus_task(void *arg)
                     enum modbus_result parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
                     if (parser_status == MODBUS_ERROR)
                     {
-                        LOG_ERROR("Bus %u error parsing frame for Slave ID: %d, Address: %d\n",
+                        LOG_ERROR("Bus %u Error parsing frame for Slave: %d, Addr: %d",
                                   bus_context->bus, p_read->slave, p_read->address);
                         break; // while, process next module
                     }
@@ -168,13 +128,13 @@ static void bus_task(void *arg)
                     {
                         if (parser_frame.function_code != p_read->function)
                         {
-                            LOG_ERROR("Bus %u received frame with wrong function code for Slave ID: %d, Address: %d\n",
+                            LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
                                       bus_context->bus, p_read->slave, p_read->address);
                             break; // while, process next module
                         }
 
                         // Just for debug
-                        // LOG_DEBUG("Bus %u Received - Slave ID: %d, Address: %d, Length: %d, Values: ",
+                        // LOG_DEBUG("Bus %u Received - Slave: %d, Addr: %d, Length: %d, Values: ",
                         //        bus_context->bus, p_read->slave, p_read->address, p_read->length);
                         // for (size_t i = 0; i < parser_frame.data_size; i++)
                         // {
@@ -213,7 +173,7 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
         .data = 0,
     };
 
-    size_t data_size = modbus_function_return_size(frame->function_code, 1);
+    size_t data_size = modbus_function_register_size(frame->function_code);
     if (frame->data_size % 2 != 0)
     {
         LOG_ERROR("Error data size must be even");
@@ -244,7 +204,7 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
             }
             else
             {
-                LOG_ERROR("Invalid data_size %u on Bus %u.\n", data_size, bus);
+                LOG_ERROR("Invalid data_size %u on Bus %u.", data_size, bus);
                 return;
             }
 
@@ -252,7 +212,7 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
             change.base.slave = p_read->slave;
             change.base.function = frame->function_code;
             change.base.length = 1;
-            LOG_INFO("Bus %u change detected - Slave ID: %d, Address: %02d = %04X\n",
+            LOG_INFO("Bus %u Change detected - Slave: %d, Addr: %02d = %04X",
                      bus, change.base.slave, change.base.address, change.data);
             if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
             {

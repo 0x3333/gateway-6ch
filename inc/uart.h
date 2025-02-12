@@ -202,11 +202,21 @@ size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size)
 /**
  * Flush the RX of a Hardware UART.
  */
-void hw_uart_flush_rx(struct hw_uart *const uart);
+void hw_uart_rx_flush(struct hw_uart *const uart);
 
 /**
  * Flush the RX of a PIO UART.
  */
-void pio_uart_flush_rx(struct pio_uart *const uart);
+void pio_uart_rx_flush(struct pio_uart *const uart);
+
+/**
+ * Return the remaining space in the TX buffer of a Hardware UART.
+ */
+size_t hw_uart_tx_buffer_remaining(const struct hw_uart *uart);
+
+/**
+ * Return the remaining space in the TX buffer of a PIO UART.
+ */
+size_t pio_uart_tx_buffer_remaining(const struct pio_uart *uart);
 
 #endif // UART_H_

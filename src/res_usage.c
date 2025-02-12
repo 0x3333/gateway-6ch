@@ -26,7 +26,7 @@ static void task_res(void *arg)
         // Get current task states
         if (uxTaskGetSystemState(start_array, TASKS_ARRAY_SIZE, &start_run_time) == 0)
         {
-            LOG_ERROR("Failed CPU Usage Start!\n");
+            LOG_ERROR("Failed CPU Usage Start!");
             continue;
         }
 
@@ -35,7 +35,7 @@ static void task_res(void *arg)
         // Get post delay task states
         if (uxTaskGetSystemState(end_array, TASKS_ARRAY_SIZE, &end_run_time) == 0)
         {
-            LOG_ERROR("Failed CPU Usage End!\n");
+            LOG_ERROR("Failed CPU Usage End!");
             continue;
         }
 
@@ -43,12 +43,12 @@ static void task_res(void *arg)
         uint32_t total_elapsed_time = (end_run_time - start_run_time);
         if (total_elapsed_time == 0)
         {
-            LOG_ERROR("Failed CPU Usage Time!\n");
+            LOG_ERROR("Failed CPU Usage Time!");
             continue;
         }
 
-        LOG_INFO("| %-20s | %8s | %10s | %20s\n", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
-        LOG_INFO("| %-20s | %8s | %10s | %20s\n", "--------------------", "--------", "----------", "---------------------");
+        LOG_INFO("| %-20s | %8s | %10s | %20s", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
+        LOG_INFO("| %-20s | %8s | %10s | %20s", "--------------------", "--------", "----------", "---------------------");
         // Match each task in start_array to those in the end_array
         for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
         {
@@ -81,17 +81,17 @@ static void task_res(void *arg)
         {
             if (start_array[i].xHandle != NULL)
             {
-                LOG_INFO("| %-20s | Deleted\n", start_array[i].pcTaskName);
+                LOG_INFO("| %-20s | Deleted", start_array[i].pcTaskName);
             }
         }
         for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
         {
             if (end_array[i].xHandle != NULL)
             {
-                LOG_INFO("| %-20s | Created\n", end_array[i].pcTaskName);
+                LOG_INFO("| %-20s | Created", end_array[i].pcTaskName);
             }
         }
-        LOG_INFO("\n");
+        printf("\n");
 #endif
 #if SHOW_HEAP_USAGE == 1
 #if SHOW_CPU_USAGE != 1
@@ -102,14 +102,14 @@ static void task_res(void *arg)
         // Get Heap stats
         vPortGetHeapStats(&heap_stat);
 
-        LOG_INFO("           Heap memory: %d (%dK)\n", configTOTAL_HEAP_SIZE, configTOTAL_HEAP_SIZE >> 10);
-        LOG_INFO(" Available bytes total: %d (%dK)\n", heap_stat.xAvailableHeapSpaceInBytes, heap_stat.xAvailableHeapSpaceInBytes >> 10);
-        LOG_INFO("         Largets block: %d (%dK)\n", heap_stat.xSizeOfLargestFreeBlockInBytes, heap_stat.xSizeOfLargestFreeBlockInBytes >> 10);
-        LOG_INFO("        Smallest block: %d (%dK)\n", heap_stat.xSizeOfSmallestFreeBlockInBytes, heap_stat.xSizeOfSmallestFreeBlockInBytes >> 10);
-        LOG_INFO("           Free blocks: %d\n", heap_stat.xNumberOfFreeBlocks);
-        LOG_INFO("    Min free remaining: %d (%dK)\n", heap_stat.xMinimumEverFreeBytesRemaining, heap_stat.xMinimumEverFreeBytesRemaining >> 10);
-        LOG_INFO("           Allocations: %d\n", heap_stat.xNumberOfSuccessfulAllocations);
-        LOG_INFO("                 Frees: %d\n", heap_stat.xNumberOfSuccessfulFrees);
+        LOG_INFO("           Heap memory: %d (%dK)", configTOTAL_HEAP_SIZE, configTOTAL_HEAP_SIZE >> 10);
+        LOG_INFO(" Available bytes total: %d (%dK)", heap_stat.xAvailableHeapSpaceInBytes, heap_stat.xAvailableHeapSpaceInBytes >> 10);
+        LOG_INFO("         Largets block: %d (%dK)", heap_stat.xSizeOfLargestFreeBlockInBytes, heap_stat.xSizeOfLargestFreeBlockInBytes >> 10);
+        LOG_INFO("        Smallest block: %d (%dK)", heap_stat.xSizeOfSmallestFreeBlockInBytes, heap_stat.xSizeOfSmallestFreeBlockInBytes >> 10);
+        LOG_INFO("           Free blocks: %d", heap_stat.xNumberOfFreeBlocks);
+        LOG_INFO("    Min free remaining: %d (%dK)", heap_stat.xMinimumEverFreeBytesRemaining, heap_stat.xMinimumEverFreeBytesRemaining >> 10);
+        LOG_INFO("           Allocations: %d", heap_stat.xNumberOfSuccessfulAllocations);
+        LOG_INFO("                 Frees: %d", heap_stat.xNumberOfSuccessfulFrees);
 #endif
     }
 }
@@ -118,6 +118,8 @@ static void task_res(void *arg)
 void res_usage_init(void)
 {
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
+    LOG_DEBUG("Initializing Resource Usage...");
+
     xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);
 #endif
 }

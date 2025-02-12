@@ -10,7 +10,8 @@
 #include "uart_tx.pio.h"
 #include "uart_rx.pio.h"
 
-#define NO_DELAY 0
+// Just to make it clear that 0 means no delay in StreamBuffer calls
+static const uint8_t NO_DELAY = 0;
 
 //
 // Prototypes
@@ -511,7 +512,7 @@ inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_
 
 // Flush
 
-inline void hw_uart_flush_rx(struct hw_uart *const uart)
+inline void hw_uart_rx_flush(struct hw_uart *const uart)
 {
     while (uart_is_readable(uart->native_uart))
     {
@@ -523,13 +524,25 @@ inline void hw_uart_flush_rx(struct hw_uart *const uart)
     xStreamBufferReset(uart->super.rx_buffer);
 }
 
-inline void pio_uart_flush_rx(struct pio_uart *const uart)
+inline void pio_uart_rx_flush(struct pio_uart *const uart)
 {
     while (!pio_rx_empty(uart))
     {
         pio_rx_getc(uart);
     }
     xStreamBufferReset(uart->super.rx_buffer);
+}
+
+// Others
+
+inline size_t hw_uart_tx_buffer_remaining(const struct hw_uart *uart)
+{
+    return xStreamBufferSpacesAvailable(uart->super.tx_buffer);
+}
+
+inline size_t pio_uart_tx_buffer_remaining(const struct pio_uart *uart)
+{
+    return xStreamBufferSpacesAvailable(uart->super.tx_buffer);
 }
 
 //
@@ -541,12 +554,12 @@ static inline void check_overrun(struct uart *uart)
     {
         uart->rx_buffer_overrun = false;
 
-        LOG_ERROR("[WARN] %s UART %lu RX Overrun.\n", uart->type, uart->id);
+        LOG_ERROR("[WARN] %s UART %lu RX Overrun.", uart->type, uart->id);
     }
     if (uart->tx_buffer_overrun)
     {
         uart->tx_buffer_overrun = false;
-        LOG_ERROR("[WARN] %s UART %lu TX Overrun.\n", uart->type, uart->id);
+        LOG_ERROR("[WARN] %s UART %lu TX Overrun.", uart->type, uart->id);
     }
 }
 
@@ -583,5 +596,7 @@ static void task_uart_maintenance(void *arg)
 
 void uart_maintenance_init(void)
 {
+    LOG_DEBUG("Initializing UART Maintenance Task...");
+
     xTaskCreate(task_uart_maintenance, "UART Maintenance", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 }

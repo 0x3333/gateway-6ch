@@ -3,15 +3,16 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "binary.h"
 
 // Used to identify messages using min_id
 enum message_types
 {
-    MESSAGE_CONFIG_BUS_ID = /**/ B00000001, // Configure the bus
-    MESSAGE_READ_ID = /*      */ B00000010, // Read address
-    MESSAGE_WRITE_ID = /*     */ B00000100, // Write address
-    MESSAGE_CHANGE_ID = /*    */ B00001000, // Write address
+    MESSAGE_CONFIG_BUS_ID = /**/ 0x1 << 0, // Configure the bus
+    MESSAGE_READ_ID = /*      */ 0x1 << 1, // Read address
+    MESSAGE_WRITE_ID = /*     */ 0x1 << 2, // Write address
+    MESSAGE_CHANGE_ID = /*    */ 0x1 << 3, // A changed has been detected
+    MESSAGE_PICO_READY_ID = /**/ 0x1 << 4, // When Pico resets, it sends this message to inform the host it is ready
+    MESSAGE_PICO_RESET_ID = /**/ 0x1 << 5, // Host send this to Pico to reset and get to a known state
 };
 
 //
@@ -22,7 +23,7 @@ struct m_handler
     void (*handler)(const void *);
 };
 
-// *** Packed structs have fields ordered to optimize alignment ***
+// *** Structs have fields order to optimize alignment by hand, but they are packed ***
 
 //
 // Base struct for Modbus Messages
@@ -74,12 +75,13 @@ struct m_change
 
 //
 // Message Handlers
-void handle_m_config_bus(struct m_config_bus *msg);
-void handle_m_read(struct m_read *msg);
-void handle_m_write(struct m_write *msg);
+void handle_m_config_bus(const struct m_config_bus *msg);
+void handle_m_read(const struct m_read *msg);
+void handle_m_write(const struct m_write *msg);
+void handle_m_pico_reset(const uint8_t *msg);
 
 //
 // All possible messages
-extern const struct m_handler m_handlers[3];
+extern const struct m_handler m_handlers[4];
 
 #endif // MESSAGES_H_

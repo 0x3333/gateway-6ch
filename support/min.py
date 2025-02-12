@@ -15,6 +15,7 @@ class MINFrame:
     def __init__(
         self,
         min_id: int,
+        seq: int,
         payload: bytes,
         ack_or_reset=False,
     ):
@@ -22,6 +23,8 @@ class MINFrame:
             self.min_id = min_id
         else:
             self.min_id = min_id & 0x3F
+            self.min_id = self.min_id | 0x80 if seq >= 0 else self.min_id
+        self.seq = seq
         self.payload = payload
 
 
@@ -37,6 +40,8 @@ def on_wire_bytes(frame: MINFrame) -> bytes:
     including stuff bytes after every 0xaa 0xaa pair
     """
     prolog = bytes([frame.min_id, len(frame.payload)]) + frame.payload
+    if frame.seq >= 0:
+        prolog = prolog[:1] + bytes([frame.seq]) + prolog[1:]
 
     crc = crc32(prolog, 0)
     raw = prolog + int32_to_bytes(crc)
@@ -60,9 +65,10 @@ def on_wire_bytes(frame: MINFrame) -> bytes:
     return bytes(stuffed)
 
 
-def create_packet(baudrate, interval, bus, slave, function, address, length):
+def create_packet(baudrate, interval, bus, slave, function, address, length, seq):
     frame = MINFrame(
-        0x01,
+        0x01,  # MESSAGE_CONFIG_BUS_ID
+        seq,
         bytes(
             [
                 baudrate & 0xFF,  # Baud rate
@@ -125,9 +131,10 @@ def main():
     parser.add_argument(
         "--length", type=int, required=True, help="Length (16-bit integer)"
     )
+    parser.add_argument("--transport", type=int, default=-1, help="Transport Sequence")
 
     args = parser.parse_args()
-
+    print(args.transport)
     packet = create_packet(
         args.baudrate,
         args.interval,
@@ -136,6 +143,7 @@ def main():
         args.function,
         args.address,
         args.length,
+        args.transport,
     )
 
     print(bytes_to_hexstr(packet))

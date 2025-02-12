@@ -22,38 +22,38 @@ int main()
     stdio_init_all();
 
 #if LIB_PICO_STDIO_USB
-    // Wait for 2 seconds USB CDC to connect, otherwise, continue
+    // Wait for 1 seconds USB CDC to connect, otherwise, continue
     uint_fast8_t wait = 0;
     while (!stdio_usb_connected())
     {
         wait++;
-        if (wait >= 2000 / 8)
+        if (wait >= 1000 / 8)
             break;
         sleep_ms(8);
     }
 #endif
 
     // Header
-    LOG_INFO("\n");
-    LOG_INFO("   ___   ____ ____  ___   ____   _____       __                         \n");
-    LOG_INFO("  / _ \\ / __// / / ( _ ) / __/  / ___/___ _ / /_ ___  _    __ ___ _ __ __\n");
-    LOG_INFO(" / , _/_\\ \\ /_  _// _  |/__ \\  / (_ // _ `// __// -_)| |/|/ // _ `// // /\n");
-    LOG_INFO("/_/|_|/___/  /_/  \\___//____/  \\___/ \\_,_/ \\__/ \\__/ |__,__/ \\_,_/ \\_, / \n");
-    LOG_INFO("                                                                  /___/  \n");
-    LOG_INFO("By: Tercio Gaudencio Filho - %s %s\n\n", __DATE__, __TIME__);
+    LOG_INFO("Wait: %u ms", wait * 8);
+    LOG_INFO("   ___   ____ ____  ___   ____   _____       __                         ");
+    LOG_INFO("  / _ \\ / __// / / ( _ ) / __/  / ___/___ _ / /_ ___  _    __ ___ _ __ __");
+    LOG_INFO(" / , _/_\\ \\ /_  _// _  |/__ \\  / (_ // _ `// __// -_)| |/|/ // _ `// // /");
+    LOG_INFO("/_/|_|/___/  /_/  \\___//____/  \\___/ \\_,_/ \\__/ \\__/ |__,__/ \\_,_/ \\_, / ");
+    LOG_INFO("                                                                  /___/  ");
+    LOG_INFO("By: Tercio Gaudencio Filho - %s %s\n", __DATE__, __TIME__);
 
     // Init Peripherals
-    LOG_INFO("Initializing Peripherals...\n");
+    LOG_INFO("Initializing Peripherals...");
 
     // Init Tasks
-    LOG_INFO("Creating tasks...\n");
+    LOG_INFO("Creating tasks...");
 
     uart_maintenance_init();
     led_init();
     host_init();
     res_usage_init();
 
-    LOG_INFO("Running\n\n");
+    LOG_INFO("Running\n");
     vTaskStartScheduler();
 
     for (;;) // Task infinite loop

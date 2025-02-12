@@ -1,15 +1,22 @@
 import serial
-from struct import unpack, pack
-from typing import List, Tuple, Optional
+import random
+import argparse
 from datetime import datetime
 
 
-class ModbusRtuFramer:
-    def __init__(self):
-        self.buffer = bytearray()
+class ModbusRTUServer:
+    def __init__(self, port, baudrate, start_addr, memory_size):
+        self.port = port
+        self.baudrate = baudrate
+        self.start_addr = start_addr
+        self.memory_size = memory_size
+        self.coils = [False] * memory_size
+        self.holding_registers = [0] * memory_size
+        self.last_read_times = {i: None for i in range(1, 5)}
+        self.last_coil_changed = 0
+        self.last_register_changed = 0
 
-    def calculate_crc(self, data: bytes) -> int:
-        """Calculate Modbus RTU CRC16 without lookup table"""
+    def calculate_crc(self, data):
         crc = 0xFFFF
         for byte in data:
             crc ^= byte
@@ -18,257 +25,125 @@ class ModbusRtuFramer:
                     crc = (crc >> 1) ^ 0xA001
                 else:
                     crc >>= 1
-        return crc
+        return crc.to_bytes(2, "little")
 
-    def validate_crc(self, data: bytes) -> bool:
-        """Validate the CRC of received message"""
-        message = data[:-2]  # Message without CRC
-        received_crc = unpack("<H", data[-2:])[0]  # Little-endian CRC
-        calculated_crc = self.calculate_crc(message)
-        if received_crc != calculated_crc:
-            print(
-                f"Data: {' '.join(f'{byte:02x}' for byte in data)}: Received CRC: {received_crc:#04x}, Calculated CRC: {calculated_crc:#04x}"
-            )
+    def verify_crc(self, data):
+        received_crc = int.from_bytes(data[-2:], "little")
+        calculated_crc = int.from_bytes(self.calculate_crc(data[:-2]), "little")
         return received_crc == calculated_crc
 
-    def parse_request(self, data: bytes) -> Optional[dict]:
-        """Parse a complete Modbus RTU request"""
-        if len(data) < 4:  # Unit ID + Function Code + CRC (2 bytes)
+    def handle_read_coils(self, slave_id, data):
+        start_addr = int.from_bytes(data[2:4], "big")
+        quantity = int.from_bytes(data[4:6], "big")
+
+        if not (
+            0 <= start_addr - self.start_addr < self.memory_size
+            and 0 < quantity <= 2000
+            and start_addr - self.start_addr + quantity <= self.memory_size
+        ):
             return None
 
-        try:
-            if not self.validate_crc(data):
-                print("CRC validation failed")
-                return None
+        # Change one random coil
+        change_idx = self.last_coil_changed % self.memory_size
+        self.coils[change_idx] = not self.coils[change_idx]
+        self.last_coil_changed = change_idx + 1
 
-            unit_id = data[0]
-            function_code = data[1]
+        # Prepare response
+        byte_count = (quantity + 7) // 8
+        response = bytearray([slave_id, 0x01, byte_count])
 
-            request = {
-                "unit_id": unit_id,
-                "function_code": function_code,
-                "data": data[2:-2],  # Remove unit ID, function code, and CRC
-            }
+        for i in range(byte_count):
+            byte = 0
+            for bit in range(min(8, quantity - i * 8)):
+                if self.coils[start_addr - self.start_addr + i * 8 + bit]:
+                    byte |= 1 << bit
+            response.append(byte)
 
-            # Parse different function codes
-            # [ID][FC][ADDR][NUM][CRC]
-            if function_code == 0x01:  # Read Coils
-                start_addr, quantity = unpack(">HH", request["data"][:4])
-                request["start_address"] = start_addr
-                request["quantity"] = quantity
-
-            return request
-
-        except Exception as e:
-            print(f"Error parsing request: {e}")
-            return None
-
-    def build_read_coils_response(self, unit_id: int, coil_values: List[bool]) -> bytes:
-        """Build response for Read Coils (0x01) request"""
-        # Calculate number of bytes needed for coil values
-        num_bytes = (len(coil_values) + 7) // 8
-
-        # Pack coils into bytes
-        coil_bytes = bytearray(num_bytes)
-        for i, value in enumerate(coil_values):
-            if value:
-                coil_bytes[i // 8] |= 1 << (i % 8)
-
-        # Build response PDU
-        function_code = 0x01
-        response = bytes([unit_id, function_code, num_bytes]) + bytes(coil_bytes)
-
-        # Calculate and append CRC
-        crc = self.calculate_crc(response)
-        response += pack("<H", crc)  # Append CRC in little-endian
+        print(
+            f"Read Coils: Slave {slave_id}, Start Addr {start_addr}, Quantity {quantity}, Response: {response.hex().upper()}",
+            end="",
+        )
 
         return response
 
+    def handle_read_holding_registers(self, slave_id, data):
+        start_addr = int.from_bytes(data[2:4], "big")
+        quantity = int.from_bytes(data[4:6], "big")
 
-class ModbusRtuServer:
-    def __init__(self, port: str, baudrate: int = 9600):
-        self.port = port
-        self.baudrate = baudrate
-        self.serial = None
-        self.framer = ModbusRtuFramer()
-        # Simulated coil values for demonstration
-        self.coils = [False] * (4 + 16)
-
-    def connect(self) -> bool:
-        """Open serial port connection"""
-        try:
-            self.serial = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                bytesize=serial.EIGHTBITS,
-                parity=serial.PARITY_NONE,
-                stopbits=serial.STOPBITS_ONE,
-                timeout=1,
-            )
-            return True
-        except Exception as e:
-            print(f"Connection failed: {e}")
-            return False
-
-    def handle_read_coils_request(self, request: dict) -> bytes:
-        """Handle Read Coils request and generate response"""
-        start_address = request["start_address"]
-        quantity = request["quantity"]
-
-        # Validate request
-        if quantity < 1 or quantity > 2000:
-            return self.build_error_response(
-                request["unit_id"],
-                request["function_code"],
-                0x03,  # Illegal data value
-            )
-
-        if start_address + quantity > len(self.coils):
-            return self.build_error_response(
-                request["unit_id"],
-                request["function_code"],
-                0x02,  # Illegal data address
-            )
-
-        # Get requested coil values
-        coil_values = self.coils[start_address : start_address + quantity]
-
-        # Build response
-        return self.framer.build_read_coils_response(request["unit_id"], coil_values)
-
-    def build_error_response(
-        self, unit_id: int, function_code: int, exception_code: int
-    ) -> bytes:
-        """Build Modbus error response"""
-        response = bytes([unit_id, function_code | 0x80, exception_code])
-        crc = self.framer.calculate_crc(response)
-        return response + pack("<H", crc)
-
-    def read_serial(self) -> Optional[dict]:
-        """Read data from serial port and parse Modbus request"""
-        if not self.serial:
-            print("Not connected")
+        if not (
+            0 <= start_addr - self.start_addr < self.memory_size
+            and 0 < quantity <= 125
+            and start_addr - self.start_addr + quantity <= self.memory_size
+        ):
             return None
 
-        try:
-            # Wait for first byte (unit ID)
-            first_byte = self.serial.read(1)
-            if not first_byte:
-                return None
+        # Change one random register
+        change_idx = self.last_register_changed % self.memory_size
+        self.holding_registers[change_idx] = random.randint(0, 65535)
+        self.last_register_changed = change_idx + 1
 
-            self.framer.buffer = bytearray(first_byte)
+        # Prepare response
+        response = bytearray([slave_id, 0x03, quantity * 2])
 
-            # Read function code
-            function_code = self.serial.read(1)
-            if not function_code:
-                return None
+        for i in range(quantity):
+            value = self.holding_registers[start_addr - self.start_addr + i]
+            response.extend(value.to_bytes(2, "big"))
 
-            self.framer.buffer.extend(function_code)
+        print(
+            f"Read Holding Reg: Slave {slave_id}, Start Addr {start_addr}, Quantity {quantity}, Response: {response.hex().upper()}",
+            end="",
+        )
 
-            # Read based on function code
-            if function_code[0] == 0x01:  # Read Coils
-                data = self.serial.read(4)  # Start address (2) + Quantity (2)
-                if not data or len(data) != 4:
-                    return None
-                self.framer.buffer.extend(data)
+        return response
 
-            # Read CRC (2 bytes)
-            crc = self.serial.read(2)
-            if not crc or len(crc) != 2:
-                return None
-
-            self.framer.buffer.extend(crc)
-
-            # Parse the complete message
-            request = self.framer.parse_request(bytes(self.framer.buffer))
-            self.framer.buffer.clear()
-            return request
-
-        except Exception as e:
-            print(f"Error reading serial: {e}")
-            return None
-
-    def set_coil(self, address: int, value: bool):
-        """Set coil value at specified address"""
-        if 0 <= address < len(self.coils):
-            self.coils[address] = value
-
-    def close(self):
-        """Close the serial connection"""
-        if self.serial:
-            self.serial.close()
-            self.serial = None
-
-
-# Keep the same last_values and change_coil functions
-last_values = {
-    1: [False, True] * 8,
-    2: [True, False] * 8,
-    3: [False, True] * 8,
-    4: [True, False] * 8,
-}
-
-
-def change_coil(unit_id, server):
-    vals = last_values[unit_id]
-    for i in range(4, 20):
-        server.set_coil(i, vals[i - 4])
-    last_values[unit_id] = vals[::-1]
-
-
-def main():
-    server = ModbusRtuServer("/dev/tty.usbserial-11210", 115200)
-
-    last_call = {
-        1: datetime.now(),
-        2: datetime.now(),
-        3: datetime.now(),
-        4: datetime.now(),
-    }
-
-    if server.connect():
-        print("Connected!")
-        try:
+    def run(self, time):
+        with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
             while True:
-                request = server.read_serial()
-                if request:
-                    print("Received Modbus request:")
-                    print(
-                        f"Unit ID: {request['unit_id']}",
-                        f"Function: {request['function_code']}",
-                        end="",
-                    )
-                    if "start_address" in request:
-                        print(
-                            f" Address: {request['start_address']}",
-                            f"Qty: {request['quantity']}",
-                        )
-                    else:
-                        print()
+                if ser.in_waiting >= 8:  # Minimum Modbus RTU frame size
+                    request = ser.read(8)
 
-                    if request["function_code"] == 0x01:  # Read Coils
-                        print(
-                            "Last call: ",
-                            round(
-                                (
-                                    datetime.now() - last_call[request["unit_id"]]
-                                ).total_seconds()
-                                * 1000,
-                                1,
-                            ),
-                            "ms",
-                        )
-                        last_call[request["unit_id"]] = datetime.now()
-                        response = server.handle_read_coils_request(request)
-                        server.serial.write(response)
-                        print("Sent response for Read Coils request")
-                        change_coil(request["unit_id"], server)
-                    print("---")
-        except KeyboardInterrupt:
-            print("\nClosing connection...")
-        finally:
-            server.close()
+                    if not self.verify_crc(request):
+                        continue
+
+                    slave_id = request[0]
+                    if not 1 <= slave_id <= 4:
+                        continue
+
+                    function_code = request[1]
+                    current_time = datetime.now()
+
+                    if not time:
+                        print()
+                    else:
+                        if self.last_read_times[slave_id]:
+                            time_diff = (
+                                current_time - self.last_read_times[slave_id]
+                            ).total_seconds()
+                            print(
+                                f" - Last read for slave {slave_id}: {time_diff * 1000:.0f} ms"
+                            )
+
+                    self.last_read_times[slave_id] = current_time
+
+                    response = None
+                    if function_code == 0x01:  # Read Coils
+                        response = self.handle_read_coils(slave_id, request)
+                    elif function_code == 0x03:  # Read Holding Registers
+                        response = self.handle_read_holding_registers(slave_id, request)
+
+                    if response:
+                        response.extend(self.calculate_crc(response))
+                        ser.write(response)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Modbus RTU Server")
+    parser.add_argument("port", help="Serial port")
+    parser.add_argument("--baud", type=int, default=115200, help="Baudrate")
+    parser.add_argument("--start", type=int, default=0, help="Starting address")
+    parser.add_argument("--size", type=int, default=100, help="Memory size")
+    parser.add_argument("--time", action="store_true", help="Print time between reads")
+
+    args = parser.parse_args()
+    server = ModbusRTUServer(args.port, args.baud, args.start, args.size)
+    server.run(args.time)

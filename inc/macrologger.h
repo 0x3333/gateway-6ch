@@ -23,6 +23,7 @@
 #ifndef __MACROLOGGER_H__
 #define __MACROLOGGER_H__
 
+#include <stdio.h>
 #include <string.h>
 #include <FreeRTOS.h>
 #include <task.h>
@@ -33,7 +34,7 @@ static inline char *timenow()
     static char buffer[36];
 
     TickType_t ticks = xTaskGetTickCount();
-    snprintf(buffer, sizeof(buffer), "%lu", ticks);
+    snprintf(buffer, sizeof(buffer), "%7lu", ticks);
 
     return buffer;
 }
@@ -51,8 +52,8 @@ static inline char *timenow()
 
 #define PRINTFUNCTION(format, ...) printf(format, __VA_ARGS__)
 
-#define LOG_FMT "%s | %-7s | %-15s | %s:%d | "
-#define LOG_ARGS(LOG_TAG) timenow(), LOG_TAG, _FILE, __func__, __LINE__
+#define LOG_FMT "%s | %-7s | %15s:%3d | "
+#define LOG_ARGS(LOG_TAG) timenow(), LOG_TAG, _FILE, __LINE__
 
 #define NEWLINE "\n"
 
