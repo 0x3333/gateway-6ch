@@ -203,10 +203,14 @@ static void bus_task(void *arg)
 void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, struct modbus_frame *frame)
 {
     // We reuse the same variable because it will be copied to the queue in case of a change
-    static struct modbus_change change = {
-        .slave_id = 0,
-        .address = 0,
-        .value = 0,
+    static struct m_change change = {
+        .base = {
+            .slave = 0,
+            .function = 0,
+            .address = 0,
+            .length = 0,
+        },
+        .data = 0,
     };
 
     size_t data_size = modbus_function_return_size(frame->function_code, 1);
@@ -224,8 +228,8 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
         {
             if (data_size == 16) // ...assume that the whole word changed
             {
-                change.address = frame->address + byte / 2;
-                change.value = frame->data[byte] << 8 | frame->data[byte + 1];
+                change.base.address = frame->address + byte / 2;
+                change.data = frame->data[byte] << 8 | frame->data[byte + 1];
             }
             else if (data_size == 1) // ...search for the bit that changed
             {
@@ -233,8 +237,8 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
                 {
                     if (diff & (1 << bit)) // Change detected
                     {
-                        change.address = frame->address + (byte * 8 + bit);
-                        change.value = (frame->data[byte] & (1 << bit)) ? 1 : 0;
+                        change.base.address = frame->address + (byte * 8 + bit);
+                        change.data = (frame->data[byte] & (1 << bit)) ? 1 : 0;
                     }
                 }
             }
@@ -245,9 +249,11 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
             }
 
             change.bus = bus;
-            change.slave_id = p_read->slave;
+            change.base.slave = p_read->slave;
+            change.base.function = frame->function_code;
+            change.base.length = 1;
             LOG_INFO("Bus %u change detected - Slave ID: %d, Address: %02d = %04X\n",
-                     bus, p_read->slave, change.address, change.value);
+                     bus, change.base.slave, change.base.address, change.data);
             if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
             {
                 LOG_ERROR("Bus %u could not send change to queue, queue full!", bus);

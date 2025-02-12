@@ -23,13 +23,13 @@ enum modbus_function
     MODBUS_FUNCTION_WRITE_HOLDING_REGISTERS = 0x10,
 };
 
-struct modbus_change
-{
-    uint8_t bus;
-    uint8_t slave_id;
-    uint16_t address;
-    uint16_t value;
-};
+// struct modbus_change
+// {
+//     uint8_t bus;
+//     uint8_t slave_id;
+//     uint16_t address;
+//     uint16_t value;
+// };
 
 /**
  * Convert a number of bits to it's byte size

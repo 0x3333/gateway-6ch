@@ -78,9 +78,16 @@ void handle_m_write(struct m_write *msg)
 void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t len_payload, uint8_t port)
 {
     (void)port;
+    // (void)len_payload;
 
-    debug(min_id, len_payload);
-    debug_array(min_payload, len_payload);
+#if LOG_LEVEL >= DEBUG_LEVEL
+    static char hex_string[256];
+    for (uint8_t i = 0; i < len_payload; i++)
+    {
+        snprintf(&hex_string[i * 3], 4, "%02x ", min_payload[i]);
+    }
+    LOG_DEBUG("Min packet received: ID %u, Size: %u, Payload: %s", min_id, len_payload, hex_string);
+#endif
 
     // Find the handler for this min_id message
     for (size_t i = 0; i < sizeof(m_handlers) / sizeof(struct m_handler); i++)
@@ -97,20 +104,22 @@ static void task_host_handler(void *arg)
 {
     (void)arg;
 
-    struct modbus_change change;
+    struct m_change change;
     uint8_t uart_read_buffer[HOST_UART_BUFFER_SIZE] = {0};
 
     for (;;) // Task infinite loop
     {
+        // Pool UART for incomming bytes to min to process
         uint8_t count = hw_uart_read_bytes(&HOST_UART, &uart_read_buffer, HOST_UART_BUFFER_SIZE);
         min_poll(&min_ctx, uart_read_buffer, count);
 
+        // Check if there is any change in the queue to be sent to host
         if (xQueueReceive(host_change_queue, &change, 0) == pdTRUE)
         {
-            LOG_DEBUG("Change: Slave %" PRIu8 " Address %" PRIu16 " Value %" PRIu16 "\n",
-                      change.slave_id, change.address, change.value);
+            LOG_DEBUG("Sending Host Slave %" PRIu8 " Address %" PRIu16 " Value %" PRIu16 "\n",
+                      change.base.slave, change.base.address, change.data);
 
-            // TODO: Send the change to the host
+            min_send_frame(&min_ctx, MESSAGE_CHANGE_ID, (uint8_t *)&change, sizeof(struct m_change));
         }
 
         vTaskDelay(pdMS_TO_TICKS(1));
@@ -123,7 +132,7 @@ void host_init(void)
 
     min_init_context(&min_ctx, 0);
 
-    host_change_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct modbus_change));
+    host_change_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_change));
 
     xTaskCreate(task_host_handler, "Host Handler", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
 }

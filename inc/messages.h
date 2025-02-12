@@ -8,9 +8,10 @@
 // Used to identify messages using min_id
 enum message_types
 {
-    MESSAGE_CONFIG_BUS = B00000001, // Configure the bus
-    MESSAGE_READ = B00000100,       // Read address
-    MESSAGE_WRITE = B00001000,      // Write address
+    MESSAGE_CONFIG_BUS_ID = /**/ B00000001, // Configure the bus
+    MESSAGE_READ_ID = /*      */ B00000010, // Read address
+    MESSAGE_WRITE_ID = /*     */ B00000100, // Write address
+    MESSAGE_CHANGE_ID = /*    */ B00001000, // Write address
 };
 
 //
@@ -37,9 +38,9 @@ struct m_base
 // Configure call to enable a Bus
 struct m_config_bus
 {
-    uint32_t baudrate;           // Bus baudrate
-    uint16_t periodic_interval;  // The interval between periodic reads
-    uint8_t bus;                 // From 0 to 5
+    uint32_t baudrate;          // Bus baudrate
+    uint16_t periodic_interval; // The interval between periodic reads
+    uint8_t bus;                // From 0 to 5
     uint8_t periodic_reads_len; // periodic_reads[] array size
     struct m_base periodic_reads[];
 } __attribute__((packed));
@@ -60,6 +61,15 @@ struct m_write
     uint8_t bus;         // From 0 to 5
     uint8_t data_length; // Data length
     uint8_t data[];      // First reference to the data
+} __attribute__((packed));
+
+//
+// Modbus change
+struct m_change
+{
+    struct m_base base; // Modbus base data
+    uint8_t bus;        // From 0 to 5
+    uint16_t data;      // First reference to the data
 } __attribute__((packed));
 
 //
