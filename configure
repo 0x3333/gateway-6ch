@@ -1,3 +1,12 @@
 #!/bin/bash
 
-cmake -S . -B ./build -G Ninja -D CMAKE_BUILD_TYPE=Release
+if [ -z "$1" ] || [ "$1" == "debug" ]; then
+    BUILD_TYPE="Debug"
+elif [ "$1" == "release" ]; then
+    BUILD_TYPE="Release"
+else
+    echo "Usage: $0 {debug|release}"
+    exit 1
+fi
+
+cmake -S . -B ./build -G Ninja -D CMAKE_BUILD_TYPE=${BUILD_TYPE}

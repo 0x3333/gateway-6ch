@@ -36,6 +36,7 @@ uint32_t min_time_ms(void)
     return xTaskGetTickCount();
 }
 
+#ifdef MIN_DEBUG_PRINTING
 void min_debug_print(const char *msg, ...)
 {
     va_list args;
@@ -43,3 +44,4 @@ void min_debug_print(const char *msg, ...)
     vprintf(msg, args);
     va_end(args);
 }
+#endif
