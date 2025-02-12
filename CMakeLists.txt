@@ -186,7 +186,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC
 target_compile_definitions(min PUBLIC
     MAX_PAYLOAD=64
     NO_TRANSPORT_PROTOCOL=1
-    MIN_DEBUG_PRINTING=1
+    # MIN_DEBUG_PRINTING=1
 )
 
 # Tell the pico SDK to also output bin/hex/uf2 files.
