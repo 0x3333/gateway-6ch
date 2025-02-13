@@ -2,6 +2,8 @@
 #define BUS_H_
 
 #include <FreeRTOS.h>
+#include <queue.h>
+
 #include "uart.h"
 #include "messages.h"
 #include "modbus.h"
@@ -18,6 +20,10 @@
 
 #ifndef BUS_MODBUS_FRAME_BUFFER_SIZE
 #define BUS_MODBUS_FRAME_BUFFER_SIZE 64
+#endif
+
+#ifndef BUS_QUEUE_LENGTH
+#define BUS_QUEUE_LENGTH 50
 #endif
 
 //
@@ -44,6 +50,9 @@ struct bus_context
     uint8_t periodic_reads_len;
     struct bus_periodic_read periodic_reads[];
 };
+
+extern QueueHandle_t bus_read_queue;
+extern QueueHandle_t bus_write_queue;
 
 //
 // Prototypes

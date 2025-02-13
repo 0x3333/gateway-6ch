@@ -18,6 +18,9 @@ char *name[COUNT_PIO_UARTS] = {
     "Bus 6",
 };
 
+// Just to make it clear that 0 means no delay in StreamBuffer calls
+static const uint8_t NO_DELAY = 0;
+
 static struct bus_context *bus_contexts[COUNT_PIO_UARTS] = {NULL};
 
 // After how many ms we will print the timeout message again
@@ -25,17 +28,84 @@ static const TickType_t DELAY_TIMEOUT_MSG = 5000;
 // After how many ms we will print the timeout message again
 static const TickType_t TIMEOUT_RESPONSE = 50;
 
+QueueHandle_t bus_read_queue;
+QueueHandle_t bus_write_queue;
+
+static TickType_t delay_write_read;
+
+static struct modbus_frame *send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave, uint8_t address, uint8_t *frame, size_t frame_size)
+{
+    static struct modbus_parser parser;
+    static struct modbus_frame parser_frame;
+    static uint8_t read_byte = 0xaa;
+    static TickType_t last_timeout;
+
+    last_timeout = 0;
+
+    // Flush any remaining byte in the UART RX buffer
+    pio_uart_rx_flush(uart);
+    // Write the frame to the UART
+    pio_uart_write_bytes(uart, frame, frame_size);
+
+    // Release the CPU until the frame is sent to UART and possibly the response is available
+    vTaskDelay(delay_write_read);
+
+    // Reset the parser
+    modbus_parser_reset(&parser);
+    // Get current tick, needed for the timeout
+    TickType_t timeout_max_tick = NEXT_TIMEOUT(TIMEOUT_RESPONSE);
+    while (true)
+    {
+        // If there is no byte available, wait or timeout
+        if (!pio_uart_read_byte(uart, &read_byte))
+        {
+            // Check if the timeout has expired
+            if (IS_EXPIRED(timeout_max_tick))
+            {
+                if (IS_EXPIRED(last_timeout))
+                {
+                    LOG_ERROR("Bus:%u Timeout on Slave: %d Addr: %d", bus, slave, address);
+
+                    last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
+                }
+                // Go to next module if timeout
+                break; // while, process next module
+            }
+            // Release CPU until some byte arrive in the buffer
+            vTaskDelay(pdMS_TO_TICKS(1));
+            continue; // while, process next module
+        }
+
+        // Process parser result
+        enum modbus_result parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
+        if (parser_status == MODBUS_ERROR)
+        {
+            LOG_ERROR("Bus %u Error parsing frame for Slave: %d, Addr: %d", bus, slave, address);
+            break; // while, process next module
+        }
+        else if (parser_status == MODBUS_COMPLETE)
+        {
+            // Just for debug
+            // LOG_DEBUG("Bus %u Received - Slave: %d, Addr: %d, Length: %d, Values: ",
+            //        bus, slave, address, parser_frame.data_size);
+            // for (size_t i = 0; i < parser_frame.data_size; i++)
+            // {
+            //     LOG_DEBUG("%02X ", parser_frame.data[i]);
+            // }
+            // debug end
+
+            return &parser_frame;
+        }
+    }
+    return NULL;
+}
+
 static void bus_task(void *arg)
 {
     struct bus_context *bus_context = arg;
 
     uint8_t framer_frame[BUS_MODBUS_FRAME_BUFFER_SIZE];
-    size_t frame_size = 0;
-    struct modbus_parser parser;
-    struct modbus_frame parser_frame;
-    uint8_t read_byte = 0xaa;
-
-    TickType_t last_timeout = 0;
+    size_t framer_frame_size = 0;
 
     // UART Initialization
     if (bus_context->baudrate > 0)
@@ -43,10 +113,6 @@ static void bus_task(void *arg)
         bus_context->pio_uart->super.baudrate = bus_context->baudrate;
     }
     pio_uart_init(bus_context->pio_uart);
-
-    // How long to wait between writing and reading(Using current baudrate, 10 bytes)
-    const TickType_t delay_write_read = pdMS_TO_TICKS(
-        ((100 * 1000000) / bus_context->pio_uart->super.baudrate + 999) / 1000);
 
     for (;;) // Task infinite loop
     {
@@ -60,101 +126,74 @@ static void bus_task(void *arg)
             if (current_ticks >= p_read->last_run + bus_context->periodic_interval)
             {
                 LOG_DEBUG("Bus %u Periodic read %u", bus_context->bus, i);
-                last_timeout = 0;
 
-                if (p_read->function == MODBUS_FUNCTION_READ_COILS)
-                {
-                    frame_size = modbus_create_read_coils_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
-                }
-                else if (p_read->function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
-                {
-                    frame_size = modbus_create_read_holding_registers_frame(p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
-                }
-                else
-                {
-                    LOG_ERROR("Bus %u Invalid Modbus function %u", bus_context->bus, p_read->function);
-                    continue;
-                }
-                if (frame_size == 0)
+                framer_frame_size = modbus_create_multiple_read_frame(p_read->function, p_read->slave, p_read->address, p_read->length, framer_frame, sizeof(framer_frame));
+                if (framer_frame_size == 0)
                 {
                     LOG_ERROR("Bus %u Could not create Modbus Frame", bus_context->bus);
                     continue;
                 }
 
-                // Flush any remaining byte in the UART RX buffer
-                pio_uart_rx_flush(bus_context->pio_uart);
-                // Write the frame to the UART
-                pio_uart_write_bytes(bus_context->pio_uart, framer_frame, frame_size);
-
-                // Release the CPU until the frame is sent to UART and possibly the response is available
-                vTaskDelay(delay_write_read);
-
-                // Reset the parser
-                modbus_parser_reset(&parser);
-                // Get current tick, needed for the timeout
-                TickType_t timeout_max_tick = NEXT_TIMEOUT(TIMEOUT_RESPONSE);
-                while (true)
+                struct modbus_frame *frame = send_modbus_frame(bus_context->bus, bus_context->pio_uart, p_read->slave, p_read->address, framer_frame, framer_frame_size);
+                if (frame->function_code != p_read->function)
                 {
-                    // If there is no byte available, wait or timeout
-                    if (!pio_uart_read_byte(bus_context->pio_uart, &read_byte))
-                    {
-                        // Check if the timeout has expired
-                        if (IS_EXPIRED(timeout_max_tick))
-                        {
-                            if (IS_EXPIRED(last_timeout))
-                            {
-                                LOG_ERROR("Bus:%u Timeout on Slave: %d Addr: %d",
-                                          bus_context->bus, p_read->slave, p_read->address);
-
-                                last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
-                            }
-                            // Go to next module if timeout
-                            break; // while, process next module
-                        }
-                        // Release CPU until some byte arrive in the buffer
-                        vTaskDelay(pdMS_TO_TICKS(1));
-                        continue; // while, process next module
-                    }
-
-                    // Process parser result
-                    enum modbus_result parser_status = modbus_parser_process_byte(&parser, &parser_frame, read_byte);
-                    if (parser_status == MODBUS_ERROR)
-                    {
-                        LOG_ERROR("Bus %u Error parsing frame for Slave: %d, Addr: %d",
-                                  bus_context->bus, p_read->slave, p_read->address);
-                        break; // while, process next module
-                    }
-                    else if (parser_status == MODBUS_COMPLETE)
-                    {
-                        if (parser_frame.function_code != p_read->function)
-                        {
-                            LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
-                                      bus_context->bus, p_read->slave, p_read->address);
-                            break; // while, process next module
-                        }
-
-                        // Just for debug
-                        // LOG_DEBUG("Bus %u Received - Slave: %d, Addr: %d, Length: %d, Values: ",
-                        //        bus_context->bus, p_read->slave, p_read->address, p_read->length);
-                        // for (size_t i = 0; i < parser_frame.data_size; i++)
-                        // {
-                        //     LOG_DEBUG("%02X ", parser_frame.data[i]);
-                        // }
-                        // debug end
-
-                        // FIXME: Corrigir esta função para funcionar com qualquer tipo de resposta
-                        process_modbus_response(bus_context->bus, p_read, &parser_frame);
-                        break; // while, process next module
-                    }
+                    LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
+                              bus_context->bus, p_read->slave, p_read->address);
+                    break; // while, process next module
                 }
+
+                process_modbus_response(bus_context->bus, p_read, frame);
 
                 p_read->last_run = xTaskGetTickCount();
             }
-            vTaskDelay(pdMS_TO_TICKS(1));
+            taskYIELD();
         }
 
-        // Handle arbitrary read/write
-        // TODO: When we receive a m_read/m_write message, dispatch a message in the modbus bus and on response, send the message back to the host
+        //
+        // Handle arbitrary Reads
+
+        struct m_read read;
+        if (xQueueReceive(bus_read_queue, &read, NO_DELAY) == pdTRUE)
+        {
+            LOG_DEBUG("Bus %u Arbitrary Read", bus_context->bus);
+
+            framer_frame_size = modbus_create_multiple_read_frame(read.base.function, read.base.slave, read.base.address, read.base.length, framer_frame, sizeof(framer_frame));
+            if (framer_frame_size == 0)
+            {
+                LOG_ERROR("Bus %u Could not create Modbus Frame", bus_context->bus);
+                continue;
+            }
+            struct modbus_frame *frame = send_modbus_frame(bus_context->bus, bus_context->pio_uart, read.base.slave, read.base.address, framer_frame, framer_frame_size);
+            if (frame->function_code != read.base.function)
+            {
+                LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
+                          bus_context->bus, read.base.slave, read.base.address);
+                break; // while, process next module
+            }
+        }
+
+        //
+        // Handle arbitrary Writes
+
+        struct m_write write;
+        if (xQueueReceive(bus_write_queue, &write, NO_DELAY) == pdTRUE)
+        {
+            LOG_DEBUG("Bus %u Arbitrary Write", bus_context->bus);
+
+            framer_frame_size = modbus_create_multiple_write_frame(write.base.function, write.base.slave, write.base.address, write.base.length, framer_frame, sizeof(framer_frame));
+            if (framer_frame_size == 0)
+            {
+                LOG_ERROR("Bus %u Could not create Modbus Frame", bus_context->bus);
+                continue;
+            }
+            struct modbus_frame *frame = send_modbus_frame(bus_context->bus, bus_context->pio_uart, write.base.slave, write.base.address, framer_frame, framer_frame_size);
+            if (frame->function_code != write.base.function)
+            {
+                LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
+                          bus_context->bus, write.base.slave, write.base.address);
+                break; // while, process next module
+            }
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1));
     }
@@ -214,7 +253,7 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
             change.base.length = 1;
             LOG_INFO("Bus %u Change detected - Slave: %d, Addr: %02d = %04X",
                      bus, change.base.slave, change.base.address, change.data);
-            if (xQueueSend(host_change_queue, &change, 0) != pdTRUE)
+            if (xQueueSend(host_change_queue, &change, NO_DELAY) != pdTRUE)
             {
                 LOG_ERROR("Bus %u could not send change to queue, queue full!", bus);
             }
@@ -230,6 +269,11 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
 void bus_init(struct bus_context *bus_context)
 {
     bus_contexts[bus_context->bus] = bus_context;
+
+    bus_read_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_read));
+    bus_write_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_write));
+    // How long to wait between writing and reading(Using current baudrate, 10 bytes)
+    delay_write_read = pdMS_TO_TICKS(((100 * 1000000) / bus_context->pio_uart->super.baudrate + 999) / 1000);
 
     BaseType_t result = xTaskCreate(bus_task,
                                     name[bus_context->bus],

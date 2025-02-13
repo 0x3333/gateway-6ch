@@ -12,6 +12,9 @@
 #include "host.h"
 #include "modbus.h"
 
+// Just to make it clear that 0 means no delay in StreamBuffer calls
+static const uint8_t NO_DELAY = 0;
+
 static struct min_context min_ctx;
 static volatile TickType_t last_heartbeat_received;
 
@@ -69,12 +72,12 @@ void handle_m_config_bus(const struct m_config_bus *msg)
 
 void handle_m_read(const struct m_read *msg)
 {
-    (void)msg;
+    xQueueSend(bus_read_queue, msg, NO_DELAY);
 }
 
 void handle_m_write(const struct m_write *msg)
 {
-    (void)msg;
+    xQueueSend(bus_write_queue, msg, NO_DELAY);
 }
 
 void handle_m_pico_reset(const uint8_t *msg)
@@ -89,7 +92,7 @@ void handle_m_pico_reset(const uint8_t *msg)
 void handle_m_heartbeat(const uint8_t *msg)
 {
     (void)msg;
-    LOG_INFO("Heartbeat received!");
+    LOG_DEBUG("Heartbeat received!");
     last_heartbeat_received = xTaskGetTickCount();
 }
 
@@ -100,7 +103,7 @@ void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t
 
 #if LOG_LEVEL >= DEBUG_LEVEL
     static char hex_string[256];
-    memset(hex_string, 0, sizeof(hex_string));
+    hex_string[0] = 0;
     for (uint8_t i = 0; i < len_payload; i++)
     {
         snprintf(&hex_string[i * 3], 4, "%02X ", min_payload[i]);

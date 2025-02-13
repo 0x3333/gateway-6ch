@@ -7,13 +7,15 @@
 // Used to identify messages using min_id
 enum message_types
 {
-    MESSAGE_CONFIG_BUS_ID = /**/ 0x1 << 0, // Configure the bus
-    MESSAGE_READ_ID = /*      */ 0x1 << 1, // Read address
-    MESSAGE_WRITE_ID = /*     */ 0x1 << 2, // Write address
-    MESSAGE_CHANGE_ID = /*    */ 0x1 << 3, // A changed has been detected
-    MESSAGE_PICO_READY_ID = /**/ 0x1 << 4, // When Pico resets, it sends this message to inform the host it is ready
-    MESSAGE_PICO_RESET_ID = /**/ 0x1 << 5, // Host send this to Pico to reset and get to a known state
-    MESSAGE_HEARTBEAT_ID = /* */ 0x3F,     // Sends this message to inform the device it is alive
+    MESSAGE_CONFIG_BUS_ID = /*     */ 0x1,  // Configure the bus
+    MESSAGE_READ_ID = /*           */ 0x2,  // Read address
+    MESSAGE_READ_RESPONSE_ID = /*  */ 0x3,  // A changed has been detected
+    MESSAGE_WRITE_ID = /*          */ 0x4,  // Write address
+    MESSAGE_WRITE_RESPONSE_ID = /* */ 0x5,  // A changed has been detected
+    MESSAGE_PERIODIC_CHANGE_ID = /**/ 0x6,  // A changed has been detected
+    MESSAGE_PICO_READY_ID = /*     */ 0x7,  // When Pico resets, it sends this message to inform the host it is ready
+    MESSAGE_PICO_RESET_ID = /*     */ 0x8,  // Host send this to Pico to reset and get to a known state
+    MESSAGE_HEARTBEAT_ID = /*      */ 0x3F, // Sends this message to inform the device it is alive
 };
 
 //
@@ -59,10 +61,9 @@ struct m_read
 // Issue a write
 struct m_write
 {
-    struct m_base base;  // Modbus base data
-    uint8_t bus;         // From 0 to 5
-    uint8_t data_length; // Data length
-    uint8_t data[];      // First reference to the data
+    struct m_base base; // Modbus base data
+    uint8_t bus;        // From 0 to 5
+    uint8_t data[];     // First reference to the data
 } __attribute__((packed));
 
 //
@@ -71,7 +72,7 @@ struct m_change
 {
     struct m_base base; // Modbus base data
     uint8_t bus;        // From 0 to 5
-    uint16_t data;      // First reference to the data
+    uint16_t data;      // Data as 16 bits, if 1 bit, consider the first bit only
 } __attribute__((packed));
 
 //

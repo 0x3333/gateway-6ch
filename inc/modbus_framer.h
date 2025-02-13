@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "modbus.h"
+#include "macrologger.h"
 
 // Creates a Read Coils (function 0x01) frame.
 // Frame: [slave][0x01][startHi][startLo][quantityHi][quantityLo][CRClo][CRChi]
@@ -142,4 +143,50 @@ static inline size_t modbus_create_write_multiple_registers_frame(uint8_t slave_
     return total_len;
 }
 
+//
+// Create a Read Coils or Holding Registers frame based on the provided function code.
+static inline size_t modbus_create_multiple_read_frame(enum modbus_function function,
+                                                       uint8_t slave_address,
+                                                       uint16_t start_address,
+                                                       uint16_t quantity,
+                                                       uint8_t *frame,
+                                                       size_t frame_size)
+{
+    if (function == MODBUS_FUNCTION_READ_COILS)
+    {
+        return modbus_create_read_coils_frame(slave_address, start_address, quantity, frame, frame_size);
+    }
+    else if (function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
+    {
+        return modbus_create_read_holding_registers_frame(slave_address, start_address, quantity, frame, frame_size);
+    }
+    else
+    {
+        LOG_ERROR("Invalid Modbus function %u", function);
+        return 0;
+    }
+}
+
+//
+// Create a Read Coils or Holding Registers frame based on the provided function code.
+static inline size_t modbus_create_single_read_frame(enum modbus_function function,
+                                                     uint8_t slave_address,
+                                                     uint16_t start_address,
+                                                     uint8_t *frame,
+                                                     size_t frame_size)
+{
+    if (function == MODBUS_FUNCTION_READ_COILS)
+    {
+        return modbus_create_read_coils_frame(slave_address, start_address, quantity, frame, frame_size);
+    }
+    else if (function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
+    {
+        return modbus_create_read_holding_registers_frame(slave_address, start_address, quantity, frame, frame_size);
+    }
+    else
+    {
+        LOG_ERROR("Invalid Modbus function %u", function);
+        return 0;
+    }
+}
 #endif // MODBUS_FRAMER_H
