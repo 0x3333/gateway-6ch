@@ -13,6 +13,7 @@
 #include "modbus.h"
 
 static struct min_context min_ctx;
+static volatile TickType_t last_heartbeat_received;
 
 QueueHandle_t host_change_queue;
 
@@ -85,6 +86,13 @@ void handle_m_pico_reset(const uint8_t *msg)
         ;
 }
 
+void handle_m_heartbeat(const uint8_t *msg)
+{
+    (void)msg;
+    LOG_INFO("Heartbeat received!");
+    last_heartbeat_received = xTaskGetTickCount();
+}
+
 // Handle Min Packet received
 void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t len_payload, uint8_t port)
 {
@@ -92,6 +100,7 @@ void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t
 
 #if LOG_LEVEL >= DEBUG_LEVEL
     static char hex_string[256];
+    memset(hex_string, 0, sizeof(hex_string));
     for (uint8_t i = 0; i < len_payload; i++)
     {
         snprintf(&hex_string[i * 3], 4, "%02X ", min_payload[i]);
@@ -122,12 +131,13 @@ static void task_host_handler(void *arg)
     // Send Pico is alive message
     min_send_frame(&min_ctx, MESSAGE_PICO_READY_ID, NULL, 0);
 
+    TickType_t last_heartbeat_sent = xTaskGetTickCount();
+    last_heartbeat_received = xTaskGetTickCount();
     for (;;) // Task infinite loop
     {
-        // Pool UART for incomming bytes to min to process
+        // Pool UART for incomming bytes to min protocol
         if (hw_uart_read_byte(&HOST_UART, &read_byte))
         {
-            LOG_DEBUG("Received byte: %02X", read_byte);
             min_poll(&min_ctx, &read_byte, 1);
         }
 
@@ -138,6 +148,18 @@ static void task_host_handler(void *arg)
                       change.base.slave, change.base.address, change.data);
 
             min_send_frame(&min_ctx, MESSAGE_CHANGE_ID, (uint8_t *)&change, sizeof(struct m_change));
+        }
+
+        if (xTaskGetTickCount() - last_heartbeat_sent > pdMS_TO_TICKS(HOST_HEARTBEAT_INTERVAL))
+        {
+            min_send_frame(&min_ctx, MESSAGE_HEARTBEAT_ID, NULL, 0);
+            last_heartbeat_sent = xTaskGetTickCount();
+        }
+
+        if (xTaskGetTickCount() - last_heartbeat_received > pdMS_TO_TICKS(HOST_MAX_HEARTBEAT_INTERVAL))
+        {
+            LOG_ERROR("Heartbeat not received in %u ms!", HOST_MAX_HEARTBEAT_INTERVAL);
+            handle_m_pico_reset(NULL);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1));

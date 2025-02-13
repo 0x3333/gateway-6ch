@@ -24,6 +24,14 @@
 #define HOST_QUEUE_LENGTH 50
 #endif
 
+#ifndef HOST_HEARTBEAT_INTERVAL
+#define HOST_HEARTBEAT_INTERVAL 1000
+#endif
+
+#ifndef HOST_MAX_HEARTBEAT_INTERVAL
+#define HOST_MAX_HEARTBEAT_INTERVAL 5000
+#endif
+
 //
 // Prototypes
 //

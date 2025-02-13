@@ -13,6 +13,7 @@ enum message_types
     MESSAGE_CHANGE_ID = /*    */ 0x1 << 3, // A changed has been detected
     MESSAGE_PICO_READY_ID = /**/ 0x1 << 4, // When Pico resets, it sends this message to inform the host it is ready
     MESSAGE_PICO_RESET_ID = /**/ 0x1 << 5, // Host send this to Pico to reset and get to a known state
+    MESSAGE_HEARTBEAT_ID = /* */ 0x3F,     // Sends this message to inform the device it is alive
 };
 
 //
@@ -79,9 +80,10 @@ void handle_m_config_bus(const struct m_config_bus *msg);
 void handle_m_read(const struct m_read *msg);
 void handle_m_write(const struct m_write *msg);
 void handle_m_pico_reset(const uint8_t *msg);
+void handle_m_heartbeat(const uint8_t *msg);
 
 //
 // All possible messages
-extern const struct m_handler m_handlers[4];
+extern const struct m_handler m_handlers[5];
 
 #endif // MESSAGES_H_
