@@ -10,7 +10,7 @@ struct modbus_frame
 {
     uint8_t address;
     uint8_t function_code;
-    uint8_t data[32];
+    uint16_t data[4];
     uint8_t data_size;
     uint16_t crc;
 };

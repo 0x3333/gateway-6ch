@@ -144,21 +144,20 @@ static inline size_t modbus_create_write_multiple_registers_frame(uint8_t slave_
 }
 
 //
-// Create a Read Coils or Holding Registers frame based on the provided function code.
-static inline size_t modbus_create_multiple_read_frame(enum modbus_function function,
-                                                       uint8_t slave_address,
-                                                       uint16_t start_address,
-                                                       uint16_t quantity,
-                                                       uint8_t *frame,
-                                                       size_t frame_size)
+// Create a Read Coils or Holding Registers frame based on parameters(Will only read 16 bits at a time)
+static inline size_t modbus_create_read_frame(enum modbus_function function,
+                                              uint8_t slave_address,
+                                              uint16_t start_address,
+                                              uint8_t *frame,
+                                              size_t frame_size)
 {
     if (function == MODBUS_FUNCTION_READ_COILS)
     {
-        return modbus_create_read_coils_frame(slave_address, start_address, quantity, frame, frame_size);
+        return modbus_create_read_coils_frame(slave_address, start_address, 16, frame, frame_size);
     }
     else if (function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
     {
-        return modbus_create_read_holding_registers_frame(slave_address, start_address, quantity, frame, frame_size);
+        return modbus_create_read_holding_registers_frame(slave_address, start_address, 1, frame, frame_size);
     }
     else
     {
@@ -168,20 +167,21 @@ static inline size_t modbus_create_multiple_read_frame(enum modbus_function func
 }
 
 //
-// Create a Read Coils or Holding Registers frame based on the provided function code.
-static inline size_t modbus_create_single_read_frame(enum modbus_function function,
-                                                     uint8_t slave_address,
-                                                     uint16_t start_address,
-                                                     uint8_t *frame,
-                                                     size_t frame_size)
+// Create a Write Coils or Holding Registers frame based on parameters(Will only write 16 bits at a time)
+static inline size_t modbus_create_write_frame(enum modbus_function function,
+                                               uint8_t slave_address,
+                                               uint16_t start_address,
+                                               uint16_t value,
+                                               uint8_t *frame,
+                                               size_t frame_size)
 {
-    if (function == MODBUS_FUNCTION_READ_COILS)
+    if (function == MODBUS_FUNCTION_WRITE_SINGLE_COIL)
     {
-        return modbus_create_read_coils_frame(slave_address, start_address, quantity, frame, frame_size);
+        return modbus_create_write_single_coil_frame(slave_address, start_address, value != 0, frame, frame_size);
     }
-    else if (function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
+    else if (function == MODBUS_FUNCTION_WRITE_HOLDING_REGISTERS)
     {
-        return modbus_create_read_holding_registers_frame(slave_address, start_address, quantity, frame, frame_size);
+        return modbus_create_write_multiple_registers_frame(slave_address, start_address, &value, 1, frame, frame_size);
     }
     else
     {
@@ -189,4 +189,5 @@ static inline size_t modbus_create_single_read_frame(enum modbus_function functi
         return 0;
     }
 }
+
 #endif // MODBUS_FRAMER_H

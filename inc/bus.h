@@ -32,13 +32,11 @@
 
 struct bus_periodic_read
 {
-    uint8_t slave;          // Modbus Slave address
-    uint8_t function;       // Modbus function to use
-    uint16_t address;       // Modbus first address to process
-    uint16_t length;        // How many entries to process
-    TickType_t last_run;    // When this periodic read last run
-    size_t memory_map_size; // Memory map size
-    uint8_t *memory_map;    // Memory map that holds the values
+    uint8_t slave;       // Modbus Slave address
+    uint8_t function;    // Modbus function to use
+    uint16_t address;    // Modbus first address to process
+    TickType_t last_run; // When this periodic read last run
+    uint16_t last_data;  // Last data read
 };
 
 struct bus_context
