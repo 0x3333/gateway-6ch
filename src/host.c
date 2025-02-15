@@ -61,8 +61,8 @@ void handle_m_config_bus(const struct m_config_bus *msg)
         bus_pr->address = msg_pr->address;
         bus_pr->last_run = 0;
         bus_pr->last_data = 0;
-        LOG_DEBUG("Bus %u PR read Slave: %u, Func: %u, Addr:%u",
-                  msg->bus, bus_pr->slave, bus_pr->function, bus_pr->address);
+        LOG_INFO("Bus %u PR read Slave: %u, Func: %u, Addr:%u",
+                 msg->bus, bus_pr->slave, bus_pr->function, bus_pr->address);
     }
     bus_init(bus_context);
 }
@@ -89,7 +89,7 @@ void handle_m_pico_reset(const uint8_t *msg)
 void handle_m_heartbeat(const uint8_t *msg)
 {
     (void)msg;
-    LOG_DEBUG("Heartbeat received!");
+    // LOG_DEBUG("Heartbeat received!");
     last_heartbeat_received = xTaskGetTickCount();
 }
 
@@ -105,7 +105,7 @@ void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t
     {
         snprintf(&hex_string[i * 3], 4, "%02X ", min_payload[i]);
     }
-    LOG_DEBUG("Min packet received: ID %u, Size: %u, Payload: %s", min_id, len_payload, hex_string);
+    // LOG_DEBUG("Min packet received: ID %u, Size: %u, Payload: %s", min_id, len_payload, hex_string);
 #else
     (void)len_payload;
 #endif
