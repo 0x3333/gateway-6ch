@@ -69,7 +69,7 @@
 
 // SMP port only.
 #ifndef configNUMBER_OF_CORES
-#define configNUMBER_OF_CORES                   2
+#define configNUMBER_OF_CORES                   1
 #endif
 #define configUSE_PASSIVE_IDLE_HOOK             0
 #define configTICK_CORE                         0

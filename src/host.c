@@ -151,8 +151,8 @@ static void task_host_handler(void *arg)
         // Check if there is any change in the queue to be sent to host
         if (xQueueReceive(host_change_queue, &read_response, 0) == pdTRUE)
         {
-            LOG_DEBUG("Sending Change Slave: %u Addr: %u Value: %04X",
-                      read_response.base.slave, read_response.base.address, read_response.data);
+            // LOG_DEBUG("Sending Change Slave: %u Addr: %u Value: %04X",
+            //           read_response.base.slave, read_response.base.address, read_response.data);
 
             min_send_frame(&min_ctx, MESSAGE_PERIODIC_READ_RESPONSE, (uint8_t *)&read_response, sizeof(struct m_read_response));
         }

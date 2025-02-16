@@ -121,7 +121,7 @@ static void bus_task(void *arg)
             struct bus_periodic_read *p_read = &bus_context->periodic_reads[i];
             if (current_ticks >= p_read->last_run + bus_context->periodic_interval)
             {
-                LOG_DEBUG("Bus %u Periodic read %u", bus_context->bus, i);
+                // LOG_DEBUG("Bus %u Periodic read %u", bus_context->bus, i);
 
                 tx_frame_size = modbus_create_read_frame(
                     p_read->function,
@@ -281,8 +281,8 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
     // If there is any change, send it to the host
     if (response.data_mask)
     {
-        LOG_INFO("Bus %u Change detected - Slave: %u, Addr: %02u = %04x",
-                 bus, response.base.slave, response.base.address, response.data);
+        // LOG_INFO("Bus %u Change detected - Slave: %u, Addr: %02u = %04x",
+        //          bus, response.base.slave, response.base.address, response.data);
         if (xQueueSend(host_change_queue, &response, NO_DELAY) != pdTRUE)
         {
             LOG_ERROR("Bus %u could not send change to queue, queue full!", bus);
