@@ -19,6 +19,8 @@ static struct min_context min_ctx;
 static volatile TickType_t last_heartbeat_received;
 
 QueueHandle_t host_change_queue;
+QueueHandle_t host_read_queue;
+QueueHandle_t host_write_queue;
 
 //
 // Message
@@ -49,6 +51,8 @@ void handle_m_config_bus(const struct m_config_bus *msg)
     bus_context->pio_uart = pio_uart;
     bus_context->baudrate = msg->baudrate;
     bus_context->bus = msg->bus;
+    bus_context->read_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_read));
+    bus_context->write_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_write));
     bus_context->periodic_interval = msg->periodic_interval;
     bus_context->periodic_reads_len = msg->periodic_reads_length;
     for (size_t i = 0; i < bus_context->periodic_reads_len; i++)
@@ -69,12 +73,12 @@ void handle_m_config_bus(const struct m_config_bus *msg)
 
 void handle_m_read(const struct m_read *msg)
 {
-    xQueueSend(bus_read_queue, msg, NO_DELAY);
+    xQueueSend(bus_get_context(msg->base.bus)->read_queue, msg, NO_DELAY);
 }
 
 void handle_m_write(const struct m_write *msg)
 {
-    xQueueSend(bus_write_queue, msg, NO_DELAY);
+    xQueueSend(bus_get_context(msg->base.bus)->write_queue, msg, NO_DELAY);
 }
 
 void handle_m_pico_reset(const uint8_t *msg)
@@ -99,12 +103,13 @@ void min_application_handler(uint8_t min_id, uint8_t const *min_payload, uint8_t
     (void)port;
 
 #if LOG_LEVEL >= DEBUG_LEVEL
-    static char hex_string[256];
-    hex_string[0] = 0;
-    for (uint8_t i = 0; i < len_payload; i++)
-    {
-        snprintf(&hex_string[i * 3], 4, "%02X ", min_payload[i]);
-    }
+    (void)len_payload;
+    // static char hex_string[256];
+    // memset(hex_string, 0, sizeof(hex_string));
+    // for (uint8_t i = 0; i < len_payload; i++)
+    // {
+    //     snprintf(&hex_string[i * 3], 4, "%02X ", min_payload[i]);
+    // }
     // LOG_DEBUG("Min packet received: ID %u, Size: %u, Payload: %s", min_id, len_payload, hex_string);
 #else
     (void)len_payload;
@@ -125,7 +130,9 @@ static void task_host_handler(void *arg)
 {
     (void)arg;
 
-    struct m_read_response response;
+    struct m_read_response read_response;
+    struct m_write_response write_response;
+
     uint8_t read_byte;
 
     // Send Pico is alive message
@@ -142,12 +149,30 @@ static void task_host_handler(void *arg)
         }
 
         // Check if there is any change in the queue to be sent to host
-        if (xQueueReceive(host_change_queue, &response, 0) == pdTRUE)
+        if (xQueueReceive(host_change_queue, &read_response, 0) == pdTRUE)
         {
             LOG_DEBUG("Sending Change Slave: %u Addr: %u Value: %04X",
-                      response.base.slave, response.base.address, response.data);
+                      read_response.base.slave, read_response.base.address, read_response.data);
 
-            min_send_frame(&min_ctx, MESSAGE_PERIODIC_READ_RESPONSE, (uint8_t *)&response, sizeof(struct m_read_response));
+            min_send_frame(&min_ctx, MESSAGE_PERIODIC_READ_RESPONSE, (uint8_t *)&read_response, sizeof(struct m_read_response));
+        }
+
+        // Check if there is any read response in the queue to be sent to host
+        if (xQueueReceive(host_read_queue, &read_response, 0) == pdTRUE)
+        {
+            LOG_DEBUG("Sending Read Slave: %u Addr: %u Suc: %c Value: %04X",
+                      read_response.base.slave, read_response.base.address, read_response.successful ? 'T' : 'F', read_response.data);
+
+            min_send_frame(&min_ctx, MESSAGE_READ_RESPONSE, (uint8_t *)&read_response, sizeof(struct m_read_response));
+        }
+
+        // Check if there is any write response in the queue to be sent to host
+        if (xQueueReceive(host_write_queue, &write_response, 0) == pdTRUE)
+        {
+            LOG_DEBUG("Sending Write Slave: %u Addr: %u Suc: %c",
+                      write_response.base.slave, write_response.base.address, write_response.successful ? 'T' : 'F');
+
+            min_send_frame(&min_ctx, MESSAGE_WRITE_RESPONSE, (uint8_t *)&write_response, sizeof(struct m_write_response));
         }
 
         if (xTaskGetTickCount() - last_heartbeat_sent > pdMS_TO_TICKS(HOST_HEARTBEAT_INTERVAL))
@@ -175,6 +200,8 @@ void host_init(void)
     min_init_context(&min_ctx, 0);
 
     host_change_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_read_response));
+    host_read_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_read_response));
+    host_write_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_write_response));
 
     xTaskCreate(task_host_handler, "Host Handler", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
 }

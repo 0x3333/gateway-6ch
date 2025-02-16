@@ -31,10 +31,10 @@ int main()
             break;
         sleep_ms(8);
     }
+    LOG_INFO("Wait: %u ms", wait * 8);
 #endif
 
     // Header
-    LOG_INFO("Wait: %u ms", wait * 8);
     LOG_INFO("   ___   ____ ____  ___   ____   _____       __                         ");
     LOG_INFO("  / _ \\ / __// / / ( _ ) / __/  / ___/___ _ / /_ ___  _    __ ___ _ __ __");
     LOG_INFO(" / , _/_\\ \\ /_  _// _  |/__ \\  / (_ // _ `// __// -_)| |/|/ // _ `// // /");

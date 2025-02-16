@@ -32,6 +32,7 @@ struct m_handler
 // Base struct for Modbus Messages
 struct m_base
 {
+    uint8_t bus;      // From 0 to 5
     uint8_t slave;    // Modbus Slave address
     uint8_t function; // Modbus function to use
     uint16_t address; // Modbus first address to process
@@ -53,7 +54,7 @@ struct m_config_bus
 struct m_read
 {
     struct m_base base; // Modbus base data
-    uint8_t bus;        // From 0 to 5
+    uint8_t seq;        // Sequence number
 } __attribute__((packed));
 
 //
@@ -63,7 +64,8 @@ struct m_read_response
     struct m_base base; // Modbus base data
     uint16_t data;      // Data as 16 bits representation
     uint16_t data_mask; // Mask to identify which bits changed
-    uint8_t bus;        // From 0 to 5
+    uint8_t successful; // If the read was successful
+    uint8_t seq;        // Sequence number
 } __attribute__((packed));
 
 //
@@ -72,7 +74,7 @@ struct m_write
 {
     struct m_base base; // Modbus base data
     uint16_t data;      // Data to write
-    uint8_t bus;        // From 0 to 5
+    uint8_t seq;        // Sequence number
 } __attribute__((packed));
 
 //
@@ -80,8 +82,8 @@ struct m_write
 struct m_write_response
 {
     struct m_base base; // Modbus base data
-    uint8_t success;    // Success flag
-    uint8_t bus;        // From 0 to 5
+    uint8_t successful; // If the write was successful
+    uint8_t seq;        // Sequence number
 } __attribute__((packed));
 
 //

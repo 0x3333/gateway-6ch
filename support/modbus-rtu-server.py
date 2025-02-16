@@ -103,6 +103,7 @@ class ModbusRTUServer:
                     request = ser.read(8)
 
                     if not self.verify_crc(request):
+                        print("CRC failed!")
                         continue
 
                     slave_id = request[0]

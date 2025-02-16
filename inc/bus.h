@@ -22,10 +22,6 @@
 #define BUS_MODBUS_FRAME_BUFFER_SIZE 64
 #endif
 
-#ifndef BUS_QUEUE_LENGTH
-#define BUS_QUEUE_LENGTH 50
-#endif
-
 //
 // Data Structures
 //
@@ -45,12 +41,11 @@ struct bus_context
     uint32_t baudrate;
     uint8_t bus;
     uint16_t periodic_interval;
+    QueueHandle_t read_queue;
+    QueueHandle_t write_queue;
     uint8_t periodic_reads_len;
     struct bus_periodic_read periodic_reads[];
 };
-
-extern QueueHandle_t bus_read_queue;
-extern QueueHandle_t bus_write_queue;
 
 //
 // Prototypes

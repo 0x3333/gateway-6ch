@@ -9,9 +9,6 @@
 #define NEXT_TIMEOUT(timeout) (xTaskGetTickCount() + pdMS_TO_TICKS(timeout))
 #define IS_EXPIRED(timeout) (xTaskGetTickCount() >= timeout)
 
-QueueHandle_t bus_read_queue;
-QueueHandle_t bus_write_queue;
-
 char *name[COUNT_PIO_UARTS] = {
     "Bus 1",
     "Bus 2",
@@ -60,7 +57,7 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
             {
                 if (IS_EXPIRED(last_timeout))
                 {
-                    LOG_ERROR("Bus:%u Timeout on Slave: %d Addr: %d", bus, slave, address);
+                    LOG_ERROR("Bus:%u Timeout on Slave: %u Addr: %u", bus, slave, address);
 
                     last_timeout = NEXT_TIMEOUT(DELAY_TIMEOUT_MSG);
                 }
@@ -76,13 +73,13 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
         enum modbus_result parser_status = modbus_parser_process_byte(&parser, rx_frame, read_byte);
         if (parser_status == MODBUS_ERROR)
         {
-            LOG_ERROR("Bus %u Error parsing frame for Slave: %d, Addr: %d", bus, slave, address);
+            LOG_ERROR("Bus %u Error parsing frame for Slave: %u, Addr: %u", bus, slave, address);
             break; // while, process next module
         }
         else if (parser_status == MODBUS_COMPLETE)
         {
             // Just for debug
-            // LOG_DEBUG("Bus %u Received - Slave: %d, Addr: %d, Length: %d, Values: ",
+            // LOG_DEBUG("Bus %u Received - Slave: %u, Addr: %u, Length: %u, Values: ",
             //        bus, slave, address, parser_frame.data_size);
             // for (size_t i = 0; i < parser_frame.data_size; i++)
             // {
@@ -108,6 +105,10 @@ static void bus_task(void *arg)
         bus_context->pio_uart->super.baudrate = bus_context->baudrate;
     }
     pio_uart_init(bus_context->pio_uart);
+
+    // TODO: If we have a lot of timeout in a bus, stop sending messages in the bus for some time(Like 10 seconds) so the devices have time to flush their rx buffer
+
+    // TODO: Implement a retry on failure on writes. On reads it is not necessary, the called is responsible for retrying.
 
     for (;;) // Task infinite loop
     {
@@ -147,7 +148,7 @@ static void bus_task(void *arg)
                     {
                         if (rx_frame.function_code != p_read->function)
                         {
-                            LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
+                            LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %u, Addr: %u",
                                       bus_context->bus, p_read->slave, p_read->address);
                         }
                         else
@@ -163,11 +164,11 @@ static void bus_task(void *arg)
 
         //
         // Handle arbitrary Reads
-
         struct m_read read;
-        if (xQueueReceive(bus_read_queue, &read, NO_DELAY) == pdTRUE)
+        if (xQueueReceive(bus_context->read_queue, &read, NO_DELAY) == pdTRUE)
         {
-            LOG_DEBUG("Bus %u Arbitrary Read", bus_context->bus);
+            // LOG_DEBUG("Bus %u Read - Seq: %u, Slave: %u, Func: %u Addr: %u",
+            //           bus_context->bus, read.seq, read.base.slave, read.base.function, read.base.address);
 
             tx_frame_size = modbus_create_read_frame(
                 read.base.function,
@@ -182,6 +183,13 @@ static void bus_task(void *arg)
             else
             {
                 struct modbus_frame rx_frame;
+                struct m_read_response response = {
+                    .base = read.base,
+                    .data = 0,
+                    .data_mask = 0,
+                    .successful = false,
+                    .seq = read.seq,
+                };
                 if (send_modbus_frame(
                         bus_context->bus,
                         bus_context->pio_uart,
@@ -189,24 +197,25 @@ static void bus_task(void *arg)
                         read.base.address,
                         tx_frame,
                         tx_frame_size,
-                        &rx_frame))
+                        &rx_frame) &&
+                    rx_frame.function_code == read.base.function)
                 {
+                    response.successful = true;
+                    response.data = rx_frame.data[0] << 8 | rx_frame.data[1];
+                    response.data_mask = 0xFFFF;
                 }
-                if (rx_frame.function_code != read.base.function)
+                if (xQueueSend(host_read_queue, &response, NO_DELAY) != pdTRUE)
                 {
-                    LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
-                              bus_context->bus, read.base.slave, read.base.address);
+                    LOG_ERROR("Bus %u could not send read response to queue, queue full!", bus_context->bus);
                 }
             }
         }
 
         //
         // Handle arbitrary Writes
-
         struct m_write write;
-        if (xQueueReceive(bus_write_queue, &write, NO_DELAY) == pdTRUE)
+        if (xQueueReceive(bus_context->write_queue, &write, NO_DELAY) == pdTRUE)
         {
-            LOG_DEBUG("Bus %u Arbitrary Write", bus_context->bus);
 
             tx_frame_size = modbus_create_write_frame(
                 write.base.function,
@@ -215,6 +224,9 @@ static void bus_task(void *arg)
                 write.data,
                 tx_frame,
                 sizeof(tx_frame));
+
+            LOG_DEBUG("Bus %u Write - Slave: %u, Func: %u Addr: %u TxFrameSize: %u",
+                      bus_context->bus, write.base.slave, write.base.function, write.base.address, tx_frame_size);
             if (tx_frame_size == 0)
             {
                 LOG_ERROR("Bus %u Could not create Modbus Frame", bus_context->bus);
@@ -222,20 +234,26 @@ static void bus_task(void *arg)
             else
             {
                 struct modbus_frame rx_frame;
+                struct m_write_response response = {
+                    .base = write.base,
+                    .successful = false,
+                    .seq = write.seq,
+                };
                 if (send_modbus_frame(
                         bus_context->bus,
                         bus_context->pio_uart,
-                        read.base.slave,
-                        read.base.address,
+                        write.base.slave,
+                        write.base.address,
                         tx_frame,
                         tx_frame_size,
-                        &rx_frame))
+                        &rx_frame) &&
+                    rx_frame.function_code == write.base.function)
                 {
+                    response.successful = true;
                 }
-                if (rx_frame.function_code != read.base.function)
+                if (xQueueSend(host_write_queue, &response, NO_DELAY) != pdTRUE)
                 {
-                    LOG_ERROR("Bus %u Received frame with wrong function code for Slave: %d, Addr: %d",
-                              bus_context->bus, write.base.slave, write.base.address);
+                    LOG_ERROR("Bus %u could not send write response to queue, queue full!", bus_context->bus);
                 }
             }
         }
@@ -254,16 +272,16 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
         return;
     }
 
-    response.bus = bus;
+    response.base.bus = bus;
     response.base.slave = p_read->slave;
     response.base.function = p_read->function;
     response.base.address = p_read->address;
-    response.data = frame->data[0];
+    response.data = frame->data[0] << 8 | frame->data[1];
     response.data_mask = frame->data[0] ^ p_read->last_data;
     // If there is any change, send it to the host
     if (response.data_mask)
     {
-        LOG_INFO("Bus %u Change detected - Slave: %d, Addr: %02d = %04X",
+        LOG_INFO("Bus %u Change detected - Slave: %u, Addr: %02u = %04x",
                  bus, response.base.slave, response.base.address, response.data);
         if (xQueueSend(host_change_queue, &response, NO_DELAY) != pdTRUE)
         {
@@ -277,9 +295,6 @@ void process_modbus_response(uint8_t bus, struct bus_periodic_read *p_read, stru
 void bus_init(struct bus_context *bus_context)
 {
     bus_contexts[bus_context->bus] = bus_context;
-
-    bus_read_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_read));
-    bus_write_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_write));
 
     BaseType_t result = xTaskCreate(bus_task,
                                     name[bus_context->bus],

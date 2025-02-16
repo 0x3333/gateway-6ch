@@ -8,9 +8,10 @@
 // Frame structure to store Modbus frame data
 struct modbus_frame
 {
-    uint8_t address;
+    uint8_t slave;
     uint8_t function_code;
-    uint16_t data[4];
+    uint8_t address;
+    uint8_t data[8];
     uint8_t data_size;
     uint16_t crc;
 };
@@ -18,8 +19,10 @@ struct modbus_frame
 // Parser state enum
 enum modbus_parser_state
 {
-    WAIT_ADDRESS,
+    WAIT_SLAVE = 0,
     WAIT_FUNCTION,
+    WAIT_ADDRESS_1,
+    WAIT_ADDRESS_2,
     WAIT_LENGTH,
     WAIT_DATA,
     WAIT_CRC1,
@@ -29,9 +32,9 @@ enum modbus_parser_state
 // Result enum
 enum modbus_result
 {
-    MODBUS_ERROR,
-    MODBUS_COMPLETE,
-    MODBUS_INCOMPLETE
+    MODBUS_COMPLETE = 0,
+    MODBUS_ERROR = 1,
+    MODBUS_INCOMPLETE = 2
 };
 
 // Parser context structure
@@ -51,7 +54,7 @@ static inline void modbus_frame_add_data(struct modbus_frame *frame, uint8_t byt
 // Reset parser
 static inline void modbus_parser_reset(struct modbus_parser *parser)
 {
-    parser->state = WAIT_ADDRESS;
+    parser->state = WAIT_SLAVE;
     parser->crc = 0xFFFF;
     parser->data_length = 0;
 }
@@ -74,8 +77,8 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
 
     switch (parser->state)
     {
-    case WAIT_ADDRESS:
-        frame->address = byte;
+    case WAIT_SLAVE:
+        frame->slave = byte;
         if (byte > 247)
         {
             ret = MODBUS_ERROR;
@@ -98,20 +101,50 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
         else
         {
             update_crc(&parser->crc, byte);
-            parser->state = WAIT_LENGTH;
+            frame->data_size = 0;
+            switch (frame->function_code)
+            {
+            case 0x01:
+            case 0x02:
+            case 0x03:
+            case 0x04:
+                parser->state = WAIT_LENGTH;
+                break;
+
+            case 0x05:
+            case 0x06:
+            case 0x0F:
+            case 0x10:
+                parser->state = WAIT_ADDRESS_1;
+                break;
+            }
         }
         break;
 
+    case WAIT_ADDRESS_1:
+        update_crc(&parser->crc, byte);
+        frame->address = byte;
+        parser->state = WAIT_ADDRESS_2;
+        break;
+
+    case WAIT_ADDRESS_2:
+        update_crc(&parser->crc, byte);
+        frame->address |= (byte << 8);
+        parser->data_length = 2;
+        parser->state = WAIT_DATA;
+
+        break;
+
     case WAIT_LENGTH:
+        update_crc(&parser->crc, byte);
         parser->data_length = byte;
         frame->data_size = 0;
-        update_crc(&parser->crc, byte);
         parser->state = WAIT_DATA;
         break;
 
     case WAIT_DATA:
-        modbus_frame_add_data(frame, byte);
         update_crc(&parser->crc, byte);
+        modbus_frame_add_data(frame, byte);
         if (frame->data_size == parser->data_length)
         {
             parser->state = WAIT_CRC1;

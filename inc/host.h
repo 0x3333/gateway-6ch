@@ -37,6 +37,8 @@
 //
 
 extern QueueHandle_t host_change_queue;
+extern QueueHandle_t host_read_queue;
+extern QueueHandle_t host_write_queue;
 
 void host_init(void);
 

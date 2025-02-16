@@ -12,15 +12,9 @@
 // Defines
 //
 
-#if PICO_RP2040
-#define PIO_FIFO_DEEP 4
-#define HW_UART_FIFO_DEEP 32
-#else
-#error "CPU Not supported!"
-#endif
-
 #ifndef UARTS_BUFFER_SIZE
-#define UARTS_BUFFER_SIZE 64
+#define UARTS_BUFFER_SIZE 256
+
 #endif
 
 // Max number of PIO UARTs possible

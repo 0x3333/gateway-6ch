@@ -177,7 +177,7 @@ static inline size_t modbus_create_write_frame(enum modbus_function function,
 {
     if (function == MODBUS_FUNCTION_WRITE_SINGLE_COIL)
     {
-        return modbus_create_write_single_coil_frame(slave_address, start_address, value != 0, frame, frame_size);
+        return modbus_create_write_single_coil_frame(slave_address, start_address, value, frame, frame_size);
     }
     else if (function == MODBUS_FUNCTION_WRITE_HOLDING_REGISTERS)
     {
