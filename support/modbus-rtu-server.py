@@ -34,7 +34,9 @@ class ModbusRTUServer:
         calculated_crc = int.from_bytes(self.calculate_crc(data[:-2]), "little")
         ret = received_crc == calculated_crc
         if not ret:
-            print(f" - CRC Failed: {received_crc:04X} / {calculated_crc:04X}")
+            print(
+                f"Request: {data.hex().upper()} - CRC Failed: {received_crc:04X} / {calculated_crc:04X}"
+            )
         return ret
 
     def handle_read_coils(self, slave_id, data):
@@ -141,6 +143,7 @@ class ModbusRTUServer:
                     elif function_code == 0x03:  # Read Holding Registers
                         response = self.handle_read_holding_registers(slave_id, request)
                     else:
+                        print(f"Returning request: {request.hex().upper()}")
                         response = bytearray(request[:-2])
 
                     if response:
