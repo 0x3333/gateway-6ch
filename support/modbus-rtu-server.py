@@ -2,6 +2,7 @@ import serial
 import random
 import argparse
 from datetime import datetime
+import time
 
 
 class ModbusRTUServer:
@@ -15,6 +16,7 @@ class ModbusRTUServer:
         self.last_read_times = {i: None for i in range(1, 5)}
         self.last_coil_changed = 0
         self.last_register_changed = 0
+        self.counter = 0
 
     def calculate_crc(self, data):
         crc = 0xFFFF
@@ -30,7 +32,10 @@ class ModbusRTUServer:
     def verify_crc(self, data):
         received_crc = int.from_bytes(data[-2:], "little")
         calculated_crc = int.from_bytes(self.calculate_crc(data[:-2]), "little")
-        return received_crc == calculated_crc
+        ret = received_crc == calculated_crc
+        if not ret:
+            print(f" - CRC Failed: {received_crc:04X} / {calculated_crc:04X}")
+        return ret
 
     def handle_read_coils(self, slave_id, data):
         start_addr = int.from_bytes(data[2:4], "big")
@@ -44,9 +49,12 @@ class ModbusRTUServer:
             return None
 
         # Change one random coil
-        change_idx = self.last_coil_changed % self.memory_size
-        self.coils[change_idx] = not self.coils[change_idx]
-        self.last_coil_changed = change_idx + 1
+        self.counter += 1
+        if self.counter % 20 == 0:
+            self.counter = 0
+            change_idx = self.last_coil_changed % self.memory_size
+            self.coils[change_idx] = not self.coils[change_idx]
+            self.last_coil_changed = change_idx + 1
 
         # Prepare response
         byte_count = (quantity + 7) // 8
@@ -60,7 +68,7 @@ class ModbusRTUServer:
             response.append(byte)
 
         print(
-            f"Read Coils: Slave {slave_id}, Start Addr {start_addr}, Quantity {quantity}, Response: {response.hex().upper()}",
+            f"Read Coils: Slave {slave_id}, Addr {start_addr}, Len {quantity}, Request: {data.hex().upper()} Response: {response.hex().upper()}",
             end="",
         )
 
@@ -96,14 +104,14 @@ class ModbusRTUServer:
 
         return response
 
-    def run(self, time):
+    def run(self, show_time):
         with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
             while True:
+                start_time = time.time()
                 if ser.in_waiting >= 8:  # Minimum Modbus RTU frame size
                     request = ser.read(8)
 
                     if not self.verify_crc(request):
-                        print("CRC failed!")
                         continue
 
                     slave_id = request[0]
@@ -113,7 +121,7 @@ class ModbusRTUServer:
                     function_code = request[1]
                     current_time = datetime.now()
 
-                    if not time:
+                    if not show_time:
                         print()
                     else:
                         if self.last_read_times[slave_id]:
@@ -126,15 +134,24 @@ class ModbusRTUServer:
 
                     self.last_read_times[slave_id] = current_time
 
+                    # print(f"Request: {request.hex().upper()}")
                     response = None
                     if function_code == 0x01:  # Read Coils
                         response = self.handle_read_coils(slave_id, request)
                     elif function_code == 0x03:  # Read Holding Registers
                         response = self.handle_read_holding_registers(slave_id, request)
+                    else:
+                        response = bytearray(request[:-2])
 
                     if response:
                         response.extend(self.calculate_crc(response))
+                        # print(f"Response: {response.hex().upper()}\n")
                         ser.write(response)
+                else:
+                    if (time.time() - start_time) >= 0.01:
+                        ser.reset_input_buffer()
+
+                time.sleep(0.001)
 
 
 if __name__ == "__main__":
