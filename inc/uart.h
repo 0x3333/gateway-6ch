@@ -8,58 +8,7 @@
 #include "hardware/pio.h"
 #include "hardware/uart.h"
 
-//
-// Defines
-//
-
-#ifndef UARTS_BUFFER_SIZE
-#define UARTS_BUFFER_SIZE 256
-
-#endif
-
-// Max number of PIO UARTs possible
-#define COUNT_HW_UARTS NUM_UARTS
-#define COUNT_PIO_UARTS 6u
-#define MAX_PIO_UARTS (NUM_PIOS * NUM_PIO_STATE_MACHINES / 2u)
-
-/*
- * PIO UART
- *
- * We use 2 PIO state machines per UART channel.
- * By default, RX channel is located in PIO0(PIO_UART_RX_PIO), TX channel in PIO1(PIO_UART_TX_PIO).
- */
-
-#ifndef PIO_UART_RX_PIO
-#define PIO_UART_RX_PIO pio0
-#endif
-
-#ifndef PIO_UART_TX_PIO
-#define PIO_UART_TX_PIO pio1
-#endif
-
-#ifndef PIO_UART_RX_FIFO_IRQ_INDEX
-#define PIO_UART_RX_FIFO_IRQ_INDEX 0
-#endif
-
-#ifndef PIO_UART_TX_DONE_IRQ_INDEX
-#define PIO_UART_TX_DONE_IRQ_INDEX 0
-#endif
-
-#ifndef PIO_UART_TX_FIFO_IRQ_INDEX
-#define PIO_UART_TX_FIFO_IRQ_INDEX 1
-#endif
-
-#if PIO_UART_TX_DONE_IRQ_INDEX == PIO_UART_TX_FIFO_IRQ_INDEX
-#error PIO_UART_TX_DONE_IRQ_INDEX cannot be equal PIO_UART_TX_FIFO_IRQ_INDEX
-#endif
-
-#ifndef HW_UART_DEFAULT_BAUDRATE
-#define HW_UART_DEFAULT_BAUDRATE 230400
-#endif
-
-#ifndef PIO_UART_DEFAULT_BAUDRATE
-#define PIO_UART_DEFAULT_BAUDRATE 115200
-#endif
+#include "config.h"
 
 //
 // Data Structures

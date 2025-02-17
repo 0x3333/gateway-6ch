@@ -33,7 +33,6 @@ endif()
 # Declare the source files.
 set(PROJECT_SRC_FILES
     src/bus.c
-    src/crc.c
     src/dmx.c
     src/host.c
     src/led.c

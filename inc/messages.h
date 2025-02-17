@@ -7,15 +7,18 @@
 // Used to identify messages using min_id
 enum message_types
 {
-    MESSAGE_CONFIG_BUS = /*            */ 0x1,  // Configure the bus
-    MESSAGE_READ = /*                  */ 0x2,  // Read address
-    MESSAGE_READ_RESPONSE = /*         */ 0x3,  // A response for a read
-    MESSAGE_WRITE = /*                 */ 0x4,  // Write address
-    MESSAGE_WRITE_RESPONSE = /*        */ 0x5,  // A response for a write
-    MESSAGE_PERIODIC_READ_RESPONSE = /**/ 0x6,  // A response for a periodic read
-    MESSAGE_PICO_READY = /*            */ 0x7,  // When Pico resets, it sends this message to inform the host it is ready
-    MESSAGE_PICO_RESET = /*            */ 0x8,  // Host send this to Pico to reset and get to a known state
-    MESSAGE_HEARTBEAT = /*             */ 0x3F, // Sends this message to inform the device it is alive
+    MESSAGE_CONFIG_BUS = /*            */ 0x1,
+
+    MESSAGE_PERIODIC_READ_REPLY = /*   */ 0x2, // When a change is detected in a periodic read
+
+    MESSAGE_COMMAND_READ = /*          */ 0x3,
+    MESSAGE_COMMAND_READ_REPLY = /*    */ 0x4,
+    MESSAGE_COMMAND_WRITE = /*         */ 0x5,
+    MESSAGE_COMMAND_WRITE_REPLY = /*   */ 0x6,
+
+    MESSAGE_PICO_READY = /*            */ 0x3D,
+    MESSAGE_PICO_RESET = /*            */ 0x3E,
+    MESSAGE_HEARTBEAT = /*             */ 0x3F,
 };
 
 //
@@ -29,8 +32,8 @@ struct m_handler
 // *** Structs have fields order to optimize alignment by hand, but they are packed ***
 
 //
-// Base struct for Modbus Messages
-struct m_base
+// Base struct for Modbus Device Messages
+struct m_device
 {
     uint8_t bus;      // From 0 to 5
     uint8_t slave;    // Modbus Slave address
@@ -46,56 +49,48 @@ struct m_config_bus
     uint16_t periodic_interval;    // The interval between periodic reads
     uint8_t bus;                   // From 0 to 5
     uint8_t periodic_reads_length; // periodic_reads[] array size
-    struct m_base periodic_reads[];
+    struct m_device periodic_reads[];
 } __attribute__((packed));
 
 //
-// Issue a read
-struct m_read
+// Issue a Read/Write Command
+struct m_command
 {
-    struct m_base base; // Modbus base data
-    uint8_t seq;        // Sequence number
-} __attribute__((packed));
-
-//
-// Read response
-struct m_read_response
-{
-    struct m_base base; // Modbus base data
-    uint16_t data;      // Data as 16 bits representation
-    uint16_t data_mask; // Mask to identify which bits changed
-    uint8_t successful; // If the read was successful
-    uint8_t seq;        // Sequence number
-} __attribute__((packed));
-
-//
-// Issue a write
-struct m_write
-{
-    struct m_base base; // Modbus base data
-    uint16_t data;      // Data to write
-    uint8_t seq;        // Sequence number
-} __attribute__((packed));
-
-//
-// Write response
-struct m_write_response
-{
-    struct m_base base; // Modbus base data
-    uint8_t successful; // If the write was successful
-    uint8_t seq;        // Sequence number
+    uint8_t type;
+    uint8_t seq;
+    struct m_device device;
+    union
+    {
+        // MESSAGE_COMMAND_READ and MESSAGE_COMMAND_TIMEOUT has no additional data
+        struct
+        {
+            uint16_t data;      // Data as 16 bits representation
+            uint16_t data_mask; // Mask to identify which bits changed
+        } __attribute__((packed)) periodic_change;
+        struct
+        {
+            uint8_t done;  // If it was successful
+            uint16_t data; // Data as 16 bits representation
+        } __attribute__((packed)) read_reply;
+        struct
+        {
+            uint16_t data; // Data to write
+        } __attribute__((packed)) write;
+        struct
+        {
+            uint8_t done; // If it was successful
+        } __attribute__((packed)) write_reply;
+    } msg;
 } __attribute__((packed));
 
 //
 // Message Handlers
 void handle_m_config_bus(const struct m_config_bus *msg);
-void handle_m_read(const struct m_read *msg);
-void handle_m_write(const struct m_write *msg);
+void handle_m_command(const struct m_command *msg);
 void handle_m_pico_reset(const uint8_t *msg);
-void handle_m_heartbeat(const uint8_t *msg);
 
 //
-// All possible messages
-extern const struct m_handler m_handlers[5];
+// Message handlers array
+extern const struct m_handler m_handlers[4];
 
 #endif // MESSAGES_H_

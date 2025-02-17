@@ -33,7 +33,7 @@ bitloop:                   ; This loop will run 8 times (8n1 UART)
 #include "hardware/dma.h"
 #include "hardware/clocks.h"
 
-#define DMX_SM_FREQ 1000000
+#include "config.h"
 
 static inline void dmx_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint en_pin)
 {

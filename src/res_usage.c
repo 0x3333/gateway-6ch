@@ -7,33 +7,32 @@
 
 #include "res_usage.h"
 
-#define STATS_TICKS pdMS_TO_TICKS(5000)
-#define TASKS_ARRAY_SIZE 20
-
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
 #warning This Resource Usage code has some issues, the code can crash !Use only if really necessary.
 
-static void task_res(void *arg)
+_Noreturn static void task_res(void *arg)
 {
     (void)arg;
+
+    static const size_t task_size = RES_USAGE_TASKS_ARRAY_SIZE;
 
     for (;;) // Task infinite loop
     {
 #if SHOW_CPU_USAGE == 1
-        static TaskStatus_t start_array[TASKS_ARRAY_SIZE], end_array[TASKS_ARRAY_SIZE];
+        static TaskStatus_t start_array[task_size], end_array[task_size];
         static configRUN_TIME_COUNTER_TYPE start_run_time, end_run_time;
 
         // Get current task states
-        if (uxTaskGetSystemState(start_array, TASKS_ARRAY_SIZE, &start_run_time) == 0)
+        if (uxTaskGetSystemState(start_array, task_size, &start_run_time) == 0)
         {
             LOG_ERROR("Failed CPU Usage Start!");
             continue;
         }
 
-        vTaskDelay(STATS_TICKS);
+        vTaskDelay(pdMS_TO_TICKS(RES_USAGE_TATS_TICKS));
 
         // Get post delay task states
-        if (uxTaskGetSystemState(end_array, TASKS_ARRAY_SIZE, &end_run_time) == 0)
+        if (uxTaskGetSystemState(end_array, task_size, &end_run_time) == 0)
         {
             LOG_ERROR("Failed CPU Usage End!");
             continue;
@@ -50,11 +49,11 @@ static void task_res(void *arg)
         LOG_INFO("| %-20s | %8s | %10s | %20s", "        Task        ", "Run Time", "Percentage", "Stack High Water Mark");
         LOG_INFO("| %-20s | %8s | %10s | %20s", "--------------------", "--------", "----------", "---------------------");
         // Match each task in start_array to those in the end_array
-        for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
+        for (UBaseType_t i = 0; i < task_size; i++)
         {
             int k = -1;
             uint32_t highWaterMark;
-            for (UBaseType_t j = 0; j < TASKS_ARRAY_SIZE; j++)
+            for (UBaseType_t j = 0; j < task_size; j++)
             {
                 if (start_array[i].xHandle != NULL && start_array[i].xHandle == end_array[j].xHandle)
                 {
@@ -77,14 +76,14 @@ static void task_res(void *arg)
         }
 
         // Print unmatched tasks
-        for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
+        for (UBaseType_t i = 0; i < task_size; i++)
         {
             if (start_array[i].xHandle != NULL)
             {
                 LOG_INFO("| %-20s | Deleted", start_array[i].pcTaskName);
             }
         }
-        for (UBaseType_t i = 0; i < TASKS_ARRAY_SIZE; i++)
+        for (UBaseType_t i = 0; i < task_size; i++)
         {
             if (end_array[i].xHandle != NULL)
             {
@@ -118,7 +117,7 @@ static void task_res(void *arg)
 void res_usage_init(void)
 {
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
-    LOG_DEBUG("Initializing Resource Usage...");
+    LOG_DEBUG("Initializing Resource Usage");
 
     xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);
 #endif

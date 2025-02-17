@@ -1,12 +1,11 @@
 #ifndef LED_H_
 #define LED_H_
 
-//
-// Defines
-//
+#include "config.h"
 
-#define LED_PIN_ACT 0
-#define LED_PIN_BUILTIN PICO_DEFAULT_LED_PIN
+//
+// Prototypes
+//
 
 void led_init(void);
 

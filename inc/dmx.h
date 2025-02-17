@@ -3,15 +3,7 @@
 
 #include "hardware/pio.h"
 
-//
-// Defines
-//
-
-#define COUNT_PIO_DMX 1u
-
-#ifndef DMX_PIO
-#define DMX_PIO pio1
-#endif
+#include "config.h"
 
 //
 // Data Structures
@@ -40,9 +32,7 @@ extern struct dmx *active_dmxs[COUNT_PIO_DMX + 1];
 //
 
 void dmx_init(struct dmx *const dmx);
-
 void dmx_write(struct dmx *const dmx, uint8_t *universe, size_t length);
-
 bool dmx_is_busy(struct dmx *const dmx);
 
 #endif

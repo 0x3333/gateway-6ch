@@ -5,15 +5,7 @@
 #include "led.h"
 #include "uart.h"
 
-#ifndef LED_ACT_DELAY
-#define LED_ACT_DELAY 40
-#endif
-
-#ifndef LED_BUILTIN_DELAY
-#define LED_BUILTIN_DELAY 250
-#endif
-
-void task_led_act(void *arg)
+_Noreturn void task_led_act(void *arg)
 {
     (void)arg;
 
@@ -40,7 +32,7 @@ void task_led_act(void *arg)
     }
 }
 
-void task_led_builtin(void *arg)
+_Noreturn void task_led_builtin(void *arg)
 {
     (void)arg;
 
@@ -56,7 +48,7 @@ void task_led_builtin(void *arg)
 
 void led_init(void)
 {
-    LOG_DEBUG("Initializing LED tasks...");
+    LOG_DEBUG("Initializing LED tasks");
 
     xTaskCreate(task_led_act, "LED Act", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
     xTaskCreate(task_led_builtin, "LED Builtin", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);

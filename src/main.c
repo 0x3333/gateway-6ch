@@ -42,11 +42,13 @@ int main()
     LOG_INFO("                                                                  /___/  ");
     LOG_INFO("By: Tercio Gaudencio Filho - %s %s\n", __DATE__, __TIME__);
 
+    // TODO: Print some configurations like Host Baudrate, queue lengths, heartbeat interval, etc.
+
     // Init Peripherals
-    LOG_INFO("Initializing Peripherals...");
+    LOG_INFO("Initializing Peripherals");
 
     // Init Tasks
-    LOG_INFO("Creating tasks...");
+    LOG_INFO("Creating tasks");
 
     uart_maintenance_init();
     led_init();

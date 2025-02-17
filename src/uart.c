@@ -5,13 +5,11 @@
 #include "macrologger.h"
 
 #include "uart.h"
+#include "utils.h"
 
 // PIO Programs
 #include "uart_tx.pio.h"
 #include "uart_rx.pio.h"
-
-// Just to make it clear that 0 means no delay in StreamBuffer calls
-static const uint8_t NO_DELAY = 0;
 
 //
 // Prototypes
@@ -189,8 +187,8 @@ void hw_uart_init(struct hw_uart *const hw_uart)
     uart_set_fifo_enabled(hw_uart->native_uart, true);
 
     // Initialize Buffers
-    hw_uart->super.tx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
-    hw_uart->super.rx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
+    hw_uart->super.tx_buffer = xStreamBufferCreate(UART_BUFFER_SIZE, sizeof(uint8_t));
+    hw_uart->super.rx_buffer = xStreamBufferCreate(UART_BUFFER_SIZE, sizeof(uint8_t));
 
     // Enable IRQ but keep it off until the Queue is filled
     irq_set_exclusive_handler(UART_IRQ_NUM(hw_uart->native_uart), hw_uart_isr);
@@ -241,8 +239,8 @@ void pio_uart_init(struct pio_uart *const pio_uart)
     uart_tx_program_init(pio_uart->tx_pio, pio_uart->tx_sm, (uint)tx_program_offset, pio_uart->super.tx_pin, pio_uart->en_pin, pio_uart->super.baudrate);
 
     // Initialize Buffers
-    pio_uart->super.tx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
-    pio_uart->super.rx_buffer = xStreamBufferCreate(UARTS_BUFFER_SIZE, sizeof(uint8_t));
+    pio_uart->super.tx_buffer = xStreamBufferCreate(UART_BUFFER_SIZE, sizeof(uint8_t));
+    pio_uart->super.rx_buffer = xStreamBufferCreate(UART_BUFFER_SIZE, sizeof(uint8_t));
 
     pio_uart->tx_done = true;
     pio_uart->super.tx_buffer_overrun = false;
@@ -409,7 +407,7 @@ static inline void hw_uart_tx_fill_fifo(struct hw_uart *uart)
     while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
         uint8_t data;
-        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, NO_DELAY) == pdTRUE)
+        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, QUEUE_NO_WAIT))
         {
             uart_putc_raw(uart->native_uart, data);
         }
@@ -421,7 +419,7 @@ static inline void hw_uart_tx_fill_fifo_from_isr(struct hw_uart *uart)
     while (uart_is_writable(uart->native_uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
         uint8_t data;
-        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL) == pdTRUE)
+        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL))
         {
             uart_putc_raw(uart->native_uart, data);
         }
@@ -433,7 +431,7 @@ static inline void pio_uart_tx_fill_fifo(struct pio_uart *uart)
     uint8_t data;
     while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
-        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, NO_DELAY) == pdTRUE)
+        if (xStreamBufferReceive(uart->super.tx_buffer, &data, 1, QUEUE_NO_WAIT))
         {
             pio_uart_putc(uart, data);
         }
@@ -445,7 +443,7 @@ static inline void pio_uart_tx_fill_fifo_from_isr(struct pio_uart *uart)
     uint8_t data;
     while (pio_uart_is_writable(uart) && !xStreamBufferIsEmpty(uart->super.tx_buffer))
     {
-        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL) == pdTRUE)
+        if (xStreamBufferReceiveFromISR(uart->super.tx_buffer, &data, 1, NULL))
         {
             pio_uart_putc(uart, data);
         }
@@ -456,7 +454,7 @@ static inline void pio_uart_tx_fill_fifo_from_isr(struct pio_uart *uart)
 
 inline size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t size)
 {
-    size_t written = xStreamBufferSend(uart->super.tx_buffer, src, size, NO_DELAY);
+    size_t written = xStreamBufferSend(uart->super.tx_buffer, src, size, QUEUE_NO_WAIT);
     uart->super.tx_buffer_overrun |= !written;
     if (written)
     {
@@ -497,7 +495,7 @@ inline bool hw_uart_read_byte(struct hw_uart *const uart, void *dst)
 
 inline size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size)
 {
-    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, size, NO_DELAY);
+    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, size, QUEUE_NO_WAIT);
 }
 
 inline bool pio_uart_read_byte(struct pio_uart *const uart, void *dst)
@@ -507,7 +505,7 @@ inline bool pio_uart_read_byte(struct pio_uart *const uart, void *dst)
 
 inline size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size)
 {
-    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, size, NO_DELAY);
+    return xStreamBufferReceive(uart->super.rx_buffer, (uint8_t *)dst, size, QUEUE_NO_WAIT);
 }
 
 // Flush
@@ -563,7 +561,7 @@ static inline void check_overrun(struct uart *uart)
     }
 }
 
-static void task_uart_maintenance(void *arg)
+_Noreturn static void task_uart_maintenance(void *arg)
 {
     (void)arg;
 
@@ -596,7 +594,7 @@ static void task_uart_maintenance(void *arg)
 
 void uart_maintenance_init(void)
 {
-    LOG_DEBUG("Initializing UART Maintenance Task...");
+    LOG_DEBUG("Initializing UART Maintenance Task");
 
     xTaskCreate(task_uart_maintenance, "UART Maintenance", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
 }

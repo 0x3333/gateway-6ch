@@ -81,5 +81,3 @@ bool dmx_is_busy(struct dmx *dmx)
     }
     return !pio_sm_is_tx_fifo_empty(dmx->pio, dmx->sm);
 }
-
-#define DMX_UNIVERSE_SIZE 512

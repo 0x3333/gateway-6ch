@@ -57,24 +57,35 @@ static inline char *timenow()
 
 #define NEWLINE "\n"
 
+#define LOG_BOOL(b) ((b) ? 'Y' : 'N')
+
 #define ERROR_TAG "ERROR"
 #define INFO_TAG "INFO"
 #define DEBUG_TAG "DEBUG"
 
+#define DEV_FMT "B%u S%u A%u | "
+#define DEVF_FMT "B%u S%u A%u F%u | "
+
 #if LOG_LEVEL >= DEBUG_LEVEL
 #define LOG_DEBUG(message, ...) PRINTFUNCTION(LOG_FMT message NEWLINE, LOG_ARGS(DEBUG_TAG), ##__VA_ARGS__)
+#define LOG_DEBUGD(message, dev, ...) PRINTFUNCTION(LOG_FMT DEV_FMT message NEWLINE, LOG_ARGS(DEBUG_TAG), (dev)->bus, (dev)->slave, (dev)->address, ##__VA_ARGS__)
+#define LOG_DEBUGDF(message, dev, ...) PRINTFUNCTION(LOG_FMT DEVF_FMT message NEWLINE, LOG_ARGS(DEBUG_TAG), (dev)->bus, (dev)->slave, (dev)->address, (dev)->function, ##__VA_ARGS__)
 #else
 #define LOG_DEBUG(message, ...)
 #endif
 
 #if LOG_LEVEL >= INFO_LEVEL
 #define LOG_INFO(message, ...) PRINTFUNCTION(LOG_FMT message NEWLINE, LOG_ARGS(INFO_TAG), ##__VA_ARGS__)
+#define LOG_INFOD(message, dev, ...) PRINTFUNCTION(LOG_FMT DEV_FMT message NEWLINE, LOG_ARGS(INFO_TAG), (dev)->bus, (dev)->slave, (dev)->address, ##__VA_ARGS__)
+#define LOG_INFODF(message, dev, ...) PRINTFUNCTION(LOG_FMT DEVF_FMT message NEWLINE, LOG_ARGS(INFO_TAG), (dev)->bus, (dev)->slave, (dev)->address, (dev)->function, ##__VA_ARGS__)
 #else
 #define LOG_INFO(message, ...)
 #endif
 
 #if LOG_LEVEL >= ERROR_LEVEL
 #define LOG_ERROR(message, ...) PRINTFUNCTION(LOG_FMT message NEWLINE, LOG_ARGS(ERROR_TAG), ##__VA_ARGS__)
+#define LOG_ERRORD(message, dev, ...) PRINTFUNCTION(LOG_FMT DEV_FMT message NEWLINE, LOG_ARGS(ERROR_TAG), (dev)->bus, (dev)->slave, (dev)->address, ##__VA_ARGS__)
+#define LOG_ERRORDF(message, dev, ...) PRINTFUNCTION(LOG_FMT DEVF_FMT message NEWLINE, LOG_ARGS(ERROR_TAG), (dev)->bus, (dev)->slave, (dev)->address, (dev)->function, ##__VA_ARGS__)
 #else
 #define LOG_ERROR(message, ...)
 #endif
