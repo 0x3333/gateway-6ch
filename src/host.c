@@ -1,17 +1,19 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <string.h>
-#include <target/min.h>
+
 #include <FreeRTOS.h>
 #include <task.h>
-#include <queue.h>
-#include "hardware/watchdog.h"
+#include <hardware/watchdog.h>
+#include <target/min.h>
 
 #include "macrologger.h"
 
 #include "host.h"
-#include "modbus.h"
+#include "uart.h"
 #include "utils.h"
+#include "messages.h"
+#include "bus.h"
 
 static struct min_context min_ctx;
 

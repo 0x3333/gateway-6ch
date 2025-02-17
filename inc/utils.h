@@ -7,11 +7,19 @@
 
 #include "config.h"
 
+//
+// Defines
+//
+
 // FreeRTOS Tick helper functions
 #define NEXT_TIMEOUT(timeout) (xTaskGetTickCount() + pdMS_TO_TICKS(timeout))
 #define IS_EXPIRED(timeout) (xTaskGetTickCount() >= timeout)
 
 #define QUEUE_NO_WAIT (0)
+
+//
+// Functions
+//
 
 /**
  * @brief Convert a byte array to a hex string.

@@ -1,7 +1,8 @@
-#include "macrologger.h"
 
 #include <FreeRTOS.h>
 #include <task.h>
+
+#include "macrologger.h"
 
 #include "bus.h"
 #include "host.h"

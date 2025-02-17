@@ -5,16 +5,17 @@
 #include <queue.h>
 
 #include "config.h"
-#include "uart.h"
-#include "bus.h"
-#include "messages.h"
 
 //
-// Prototypes
+// Variables
 //
 
 extern QueueHandle_t host_change_queue;
 extern QueueHandle_t host_command_queue;
+
+//
+// Prototypes
+//
 
 void host_init(void);
 

@@ -7,7 +7,9 @@
 #include "macrologger.h"
 
 #include "target/min.h"
-#include "host.h"
+
+#include "uart.h"
+#include "config.h"
 
 void min_tx_start(uint8_t port)
 {
