@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <FreeRTOS.h>
 #include <stream_buffer.h>
+#include <semphr.h>
 
 #include "hardware/pio.h"
 #include "hardware/uart.h"
@@ -26,11 +27,14 @@ struct uart
     const uint rx_pin;
     const uint tx_pin;
 
-    StreamBufferHandle_t tx_buffer;  // TX Buffer
-    volatile bool tx_buffer_overrun; // If the TX Buffer has overrun
-    StreamBufferHandle_t rx_buffer;  // RX Buffer
-    volatile bool rx_buffer_overrun; // If the RX Buffer has overrun
-    const uint32_t id;               // Used to identify this UART between all instances
+    StreamBufferHandle_t tx_buffer;    // TX Buffer
+    SemaphoreHandle_t tx_buffer_mutex; // Mutex to protect the TX Buffer
+    volatile bool tx_buffer_overrun;   // If the TX Buffer has overrun
+    volatile bool tx_done;             // If the TX has no more data to send
+    SemaphoreHandle_t rx_buffer_mutex; // Mutex to protect the RX Buffer
+    StreamBufferHandle_t rx_buffer;    // RX Buffer
+    volatile bool rx_buffer_overrun;   // If the RX Buffer has overrun
+    const uint32_t id;                 // Used to identify this UART between all instances
 
     volatile bool activity; // If there is activity in this UART
 };
@@ -51,7 +55,6 @@ struct pio_uart
 
     PIO tx_pio;
     uint tx_sm;
-    volatile bool tx_done;
 };
 
 //
@@ -107,22 +110,16 @@ struct pio_uart *get_pio_uart_by_index(uint8_t index);
 void uart_maintenance_init(void);
 
 /**
- * Write data to a Hardware UART.
+ * Write data to a Hardware UART. Will wait for space in the queue.
  * The data bytes are copied into the Stream buffer.
  */
-size_t hw_uart_write_bytes(struct hw_uart *const uart, const void *src, size_t size);
+size_t hw_uart_write_bytes_blocking(struct hw_uart *const uart, const void *src, size_t size);
 
 /**
- * Write data to a PIO UART.
+ * Write data to a PIO UART. Will wait for space in the queue.
  * The data bytes are copied into the Stream buffer.
  */
-size_t pio_uart_write_bytes(struct pio_uart *const uart, const void *src, size_t size);
-
-/**
- * Read a byte from a Hardware UART.
- * @return If a byte has been read or not.
- */
-bool hw_uart_read_byte(struct hw_uart *const uart, void *dst);
+size_t pio_uart_write_bytes_blocking(struct pio_uart *const uart, const void *src, size_t size);
 
 /**
  * Read bytes from a Hardware UART.
@@ -131,16 +128,22 @@ bool hw_uart_read_byte(struct hw_uart *const uart, void *dst);
 size_t hw_uart_read_bytes(struct hw_uart *const uart, void *dst, uint8_t size);
 
 /**
- * Read a byte from a PIO UART.
- * @return If a byte has been read or not.
+ * Read bytes from a Hardware UART, waiting for new bytes to arrive if empty.
+ * @return Number of bytes read. May not be equal to data_length.
  */
-bool pio_uart_read_byte(struct pio_uart *const uart, void *dst);
+size_t hw_uart_read_bytes_blocking(struct hw_uart *const uart, void *dst, uint8_t size);
 
 /**
  * Read bytes from a PIO UART.
  * @return Number of bytes read. May not be equal to data_length.
  */
 size_t pio_uart_read_bytes(struct pio_uart *const uart, void *dst, uint8_t size);
+
+/**
+ * Read bytes from a PIO UART, waiting for new bytes to arrive if empty.
+ * @return Number of bytes read. May not be equal to data_length.
+ */
+size_t pio_uart_read_bytes_blocking(struct pio_uart *const uart, void *dst, uint8_t size);
 
 /**
  * Flush the RX of a Hardware UART.

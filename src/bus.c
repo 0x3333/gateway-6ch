@@ -25,8 +25,8 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
     uint8_t read_byte = 0xaa;
     TickType_t last_timeout = 0;
 
-    pio_uart_rx_flush(uart);                          // Flush any remaining byte in the UART RX buffer
-    pio_uart_write_bytes(uart, tx_frame, frame_size); // Write the frame to the UART
+    pio_uart_rx_flush(uart);                                   // Flush any remaining byte in the UART RX buffer
+    pio_uart_write_bytes_blocking(uart, tx_frame, frame_size); // Write the frame to the UART
 
     // Release the CPU until the frame is sent to UART and possibly the response is available
     vTaskDelay(pdMS_TO_TICKS(BUS_DELAY_WRITE_READ));
@@ -37,7 +37,7 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
 
     while (true)
     {
-        if (!pio_uart_read_byte(uart, &read_byte)) // If there is no byte available, wait or timeout
+        if (!pio_uart_read_bytes(uart, &read_byte, 1)) // If there is no byte available, wait or timeout
         {
 
             if (IS_EXPIRED(timeout_max_tick)) // Check if the timeout has expired
@@ -101,7 +101,7 @@ static void bus_task(void *arg)
             if (IS_EXPIRED(p_read->next_run))
             {
 #ifdef BUS_DEBUG_PERIODIC_READS
-                LOG_DEBUG(DEVF_FMT, "Periodic Read",
+                LOG_DEBUG(DEVF_FMT "Periodic Read",
                           bus_context->bus, p_read->slave, p_read->address, p_read->function);
 #endif
                 tx_frame_size = modbus_create_read_frame(
@@ -146,7 +146,7 @@ static void bus_task(void *arg)
         //
         // Handle Commands
         struct m_command command;
-        if (xQueueReceive(bus_context->command_queue, &command, QUEUE_NO_WAIT))
+        if (xQueueReceive(bus_context->command_queue, &command, FREERTOS_NO_WAIT))
         {
             struct m_device device = command.device;
             LOG_DEBUG(DEVF_FMT "Processing Command - Type: %u, Seq: %u",
@@ -237,7 +237,7 @@ static void bus_task(void *arg)
                     LOG_ERROR(DEVF_FMT "Modbus Frame send failed",
                               bus_context->bus, device.slave, device.address, device.function);
                 }
-                if (!xQueueSend(host_command_queue, &reply, QUEUE_NO_WAIT))
+                if (!xQueueSend(host_command_queue, &reply, FREERTOS_NO_WAIT))
                 {
                     LOG_ERROR("Bus %u could not send read reply to queue, queue full!", bus_context->bus);
                 }
@@ -258,21 +258,22 @@ void process_periodic_reply(uint8_t bus, struct bus_periodic_read *p_read, struc
 
     struct m_command reply = {0};
 
+    uint16_t data = frame->data[0] << 8 | frame->data[1];
     reply.device.bus = bus;
     reply.device.slave = p_read->slave;
     reply.device.function = p_read->function;
     reply.device.address = p_read->address;
-    reply.msg.periodic_change.data = frame->data[0] << 8 | frame->data[1];
-    reply.msg.periodic_change.data_mask = frame->data[0] ^ p_read->last_data;
+    reply.msg.periodic_change.data = data;
+    reply.msg.periodic_change.data_mask = data ^ p_read->last_data;
     // If there is any change, send it to the host
     if (reply.msg.periodic_change.data_mask)
     {
 #ifdef BUS_DEBUG_PERIODIC_READS
-        LOG_INFO(DEVF_FMT "Change detected %04x",
-                 bus, reply.device.slave, reply.device.address,
-                 to_bin_hex_string(&reply.msg.periodic_change.data, 2));
+        LOG_INFO(DEVF_FMT "Change detected %s",
+                 bus, reply.device.slave, reply.device.address, reply.device.function,
+                 to_bin_hex_string((uint8_t *)&reply.msg.periodic_change.data, 2));
 #endif
-        if (!xQueueSend(host_change_queue, &reply, QUEUE_NO_WAIT))
+        if (!xQueueSend(host_change_queue, &reply, FREERTOS_NO_WAIT))
         {
             LOG_ERROR("Bus %u could not send change to queue, queue full!", bus);
         }
@@ -285,17 +286,13 @@ void bus_init(struct bus_context *bus_context)
 {
     bus_contexts[bus_context->bus] = bus_context;
 
-    BaseType_t result = xTaskCreate(bus_task,
-                                    name[bus_context->bus],
-                                    configMINIMAL_STACK_SIZE * 4,
-                                    bus_context,
-                                    tskDEFAULT_PRIORITY,
-                                    NULL);
-
-    if (result != pdPASS)
-    {
-        LOG_ERROR("Bus Task creation failed!");
-    }
+    xTaskCreateAffinitySet(bus_task,
+                           name[bus_context->bus],
+                           configMINIMAL_STACK_SIZE * 4,
+                           bus_context,
+                           tskDEFAULT_PRIORITY,
+                           BUS_TASK_CORE_AFFINITY,
+                           NULL);
 }
 
 struct bus_context *bus_get_context(uint8_t bus)

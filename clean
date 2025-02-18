@@ -1,5 +1,15 @@
 #!/bin/bash
 
-rm -Rf build; mkdir build
+if [ -z "$1" ] || [ "$1" == "debug" ]; then
+    BUILD_TYPE="debug"
+elif [ "$1" == "release" ]; then
+    BUILD_TYPE="release"
+else
+    echo "Usage: $0 {debug|release}"
+    exit 1
+fi
 
-./configure
+rm -Rf build
+mkdir build
+
+./configure ${BUILD_TYPE}

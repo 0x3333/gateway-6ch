@@ -52,7 +52,7 @@ class ModbusRTUServer:
 
         # Change one random coil
         self.counter += 1
-        if self.counter % 20 == 0:
+        if self.counter % 100 == 0:
             self.counter = 0
             change_idx = self.last_coil_changed % self.memory_size
             self.coils[change_idx] = not self.coils[change_idx]
@@ -88,9 +88,12 @@ class ModbusRTUServer:
             return None
 
         # Change one random register
-        change_idx = self.last_register_changed % self.memory_size
-        self.holding_registers[change_idx] = random.randint(0, 65535)
-        self.last_register_changed = change_idx + 1
+        self.counter += 1
+        if self.counter % 100 == 0:
+            self.counter = 0
+            change_idx = self.last_register_changed % self.memory_size
+            self.holding_registers[change_idx] = random.randint(0, 65535)
+            self.last_register_changed = change_idx + 1
 
         # Prepare response
         response = bytearray([slave_id, 0x03, quantity * 2])
@@ -107,11 +110,15 @@ class ModbusRTUServer:
         return response
 
     def run(self, show_time):
+        timeout = 20.0 / 1000
+        last_check = time.time()
+
         with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
             while True:
-                start_time = time.time()
                 if ser.in_waiting >= 8:  # Minimum Modbus RTU frame size
                     request = ser.read(8)
+
+                    last_check = time.time()
 
                     if not self.verify_crc(request):
                         continue
@@ -150,10 +157,9 @@ class ModbusRTUServer:
                         response.extend(self.calculate_crc(response))
                         # print(f"Response: {response.hex().upper()}\n")
                         ser.write(response)
-                else:
-                    if (time.time() - start_time) >= 0.01:
-                        ser.reset_input_buffer()
-
+                elif time.time() - last_check > timeout:
+                    ser.reset_input_buffer()
+                    last_check = time.time()
                 time.sleep(0.001)
 
 

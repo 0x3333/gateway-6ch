@@ -4,6 +4,7 @@
 
 #include "led.h"
 #include "uart.h"
+#include "utils.h"
 
 _Noreturn void task_led_act(void *arg)
 {
@@ -50,6 +51,19 @@ void led_init(void)
 {
     LOG_DEBUG("Initializing LED tasks");
 
-    xTaskCreate(task_led_act, "LED Act", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
-    xTaskCreate(task_led_builtin, "LED Builtin", configMINIMAL_STACK_SIZE, NULL, tskLOW_PRIORITY, NULL);
+    xTaskCreateAffinitySet(task_led_act,
+                           "LED Act",
+                           configMINIMAL_STACK_SIZE,
+                           NULL,
+                           tskLOW_PRIORITY,
+                           UART_ACTIVITY_TASK_CORE_AFFINITY,
+                           NULL);
+
+    xTaskCreateAffinitySet(task_led_builtin,
+                           "LED Builtin",
+                           configMINIMAL_STACK_SIZE,
+                           NULL,
+                           tskLOW_PRIORITY,
+                           UART_MAINTENANCE_TASK_CORE_AFFINITY,
+                           NULL);
 }

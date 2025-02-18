@@ -24,7 +24,7 @@ void min_tx_finished(uint8_t port)
 void min_tx_byte(uint8_t port, uint8_t byte)
 {
     (void)port;
-    hw_uart_write_bytes(&HOST_UART, &byte, 1);
+    hw_uart_write_bytes_blocking(&HOST_UART, &byte, 1);
 }
 
 uint16_t min_tx_space(uint8_t port)

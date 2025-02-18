@@ -4,6 +4,7 @@
 
 #include <FreeRTOS.h>
 #include <task.h>
+#include <semphr.h>
 #include <hardware/watchdog.h>
 #include <target/min.h>
 
@@ -28,9 +29,15 @@ QueueHandle_t host_command_queue;
 
 void handle_m_config_bus(const struct m_config_bus *msg)
 {
+    struct m_command reply = {0};
+    reply.type = MESSAGE_COMMAND_READ_REPLY;
+    reply.msg.config_bus_reply.done = false;
+
     if (bus_get_context(msg->bus))
     {
         LOG_ERROR("Bus %u already configured!", msg->bus);
+        reply.msg.config_bus_reply.already_configured = true;
+        xQueueSend(host_command_queue, &reply, FREERTOS_NO_WAIT);
         return;
     }
     LOG_INFO("Bus %u starting", msg->bus);
@@ -39,6 +46,8 @@ void handle_m_config_bus(const struct m_config_bus *msg)
     if (pio_uart == NULL || pio_uart->super.id != msg->bus)
     {
         LOG_ERROR("Invalid Bus number %u!", msg->bus);
+        reply.msg.config_bus_reply.invalid_bus = true;
+        xQueueSend(host_command_queue, &reply, FREERTOS_NO_WAIT);
         return;
     }
 
@@ -67,11 +76,14 @@ void handle_m_config_bus(const struct m_config_bus *msg)
         LOG_INFO(DEVF_FMT "Periodic Read", msg->bus, bus_pr->slave, bus_pr->address, bus_pr->function);
     }
     bus_init(bus_context);
+
+    reply.msg.config_bus_reply.done = true;
+    xQueueSend(host_command_queue, &reply, FREERTOS_NO_WAIT);
 }
 
 void handle_m_command(const struct m_command *msg)
 {
-    xQueueSend(bus_get_context(msg->device.bus)->command_queue, msg, QUEUE_NO_WAIT);
+    xQueueSend(bus_get_context(msg->device.bus)->command_queue, msg, FREERTOS_NO_WAIT);
 }
 
 void handle_m_pico_reset(const uint8_t *msg)
@@ -81,6 +93,18 @@ void handle_m_pico_reset(const uint8_t *msg)
     watchdog_enable(1, 1); // Enable watchdog and check how to work this out
     while (true)
         ;
+}
+
+/**
+ * Lock the mutex to send the frame in one piece.
+ */
+static inline void safe_min_send_frame(uint8_t min_id, uint8_t const *payload, uint8_t payload_len)
+{
+    if (xSemaphoreTake(HOST_UART.super.tx_buffer_mutex, portMAX_DELAY))
+    {
+        min_send_frame(&min_ctx, min_id, payload, payload_len);
+        xSemaphoreGive(HOST_UART.super.tx_buffer_mutex);
+    }
 }
 
 // Handle Min Packet received
@@ -111,12 +135,12 @@ _Noreturn static void task_host_handler(void *arg)
     struct m_command command;
 
     // Send Pico is alive message
-    min_send_frame(&min_ctx, MESSAGE_PICO_READY, NULL, 0);
+    safe_min_send_frame(MESSAGE_PICO_READY, NULL, 0);
 
     for (;;) // Task infinite loop
     {
         // Pool UART for incomming bytes to min protocol
-        if (hw_uart_read_byte(&HOST_UART, &read_byte))
+        if (hw_uart_read_bytes(&HOST_UART, &read_byte, 1))
         {
             min_poll(&min_ctx, &read_byte, 1);
         }
@@ -125,7 +149,7 @@ _Noreturn static void task_host_handler(void *arg)
         if (xQueueReceive(host_change_queue, &command, 0))
         {
             LOG_DEBUGD("Sending Change - %04X", &command.device, command.msg.read_reply.data);
-            min_send_frame(&min_ctx, MESSAGE_PERIODIC_READ_REPLY, (uint8_t *)&command, sizeof(command));
+            safe_min_send_frame(MESSAGE_PERIODIC_READ_REPLY, (uint8_t *)&command, sizeof(command));
         }
 
         // Check if there is any command response in the queue to be sent to host
@@ -135,11 +159,11 @@ _Noreturn static void task_host_handler(void *arg)
             {
             case MESSAGE_COMMAND_READ_REPLY:
                 LOG_DEBUGD("Sending READ Response Done: %c", &command.device, LOG_BOOL(command.msg.read_reply.done));
-                min_send_frame(&min_ctx, MESSAGE_COMMAND_READ_REPLY, (uint8_t *)&command, sizeof(command));
+                safe_min_send_frame(MESSAGE_COMMAND_READ_REPLY, (uint8_t *)&command, sizeof(command));
                 break;
             case MESSAGE_COMMAND_WRITE_REPLY:
                 LOG_DEBUGD("Sending WRITE Response Done: %c", &command.device, LOG_BOOL(command.msg.write_reply.done));
-                min_send_frame(&min_ctx, MESSAGE_COMMAND_WRITE_REPLY, (uint8_t *)&command, sizeof(command));
+                safe_min_send_frame(MESSAGE_COMMAND_WRITE_REPLY, (uint8_t *)&command, sizeof(command));
                 break;
             default:
                 LOG_ERROR("Unknown command type %u", command.type);
@@ -149,7 +173,7 @@ _Noreturn static void task_host_handler(void *arg)
 
         if (IS_EXPIRED(next_heartbeat))
         {
-            min_send_frame(&min_ctx, MESSAGE_HEARTBEAT, NULL, 0);
+            safe_min_send_frame(MESSAGE_HEARTBEAT, NULL, 0);
             next_heartbeat = NEXT_TIMEOUT(HOST_HEARTBEAT_INTERVAL);
         }
 
@@ -168,5 +192,11 @@ void host_init(void)
     host_change_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_command));
     host_command_queue = xQueueCreate(HOST_QUEUE_LENGTH, sizeof(struct m_command));
 
-    xTaskCreate(task_host_handler, "Host Handler", configMINIMAL_STACK_SIZE, NULL, tskDEFAULT_PRIORITY, NULL);
+    xTaskCreateAffinitySet(task_host_handler,
+                           "Host Handler",
+                           configMINIMAL_STACK_SIZE,
+                           NULL,
+                           tskDEFAULT_PRIORITY,
+                           HOST_TASK_CORE_AFFINITY,
+                           NULL);
 }

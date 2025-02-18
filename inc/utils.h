@@ -15,7 +15,11 @@
 #define NEXT_TIMEOUT(timeout) (xTaskGetTickCount() + pdMS_TO_TICKS(timeout))
 #define IS_EXPIRED(timeout) (xTaskGetTickCount() >= timeout)
 
-#define QUEUE_NO_WAIT (0)
+#define FREERTOS_NO_WAIT (0)
+
+#if (configNUMBER_OF_CORES < 2)
+#define xTaskCreateAffinitySet(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, uxCoreAffinityMask, pxCreatedTask ) xTaskCreate(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, pxCreatedTask)
+#endif
 
 //
 // Functions

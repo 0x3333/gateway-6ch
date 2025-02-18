@@ -19,7 +19,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_definitions(-DLOG_LEVEL=DEBUG_LEVEL)
 endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_definitions(-DLOG_LEVEL=ERROR_LEVEL)
+    # Currently, allow debug logs in release mode
+    add_definitions(-DLOG_LEVEL=DEBUG_LEVEL)
 endif()
 
 # If we want to print CPU/HEAP usage in the console
@@ -41,6 +42,7 @@ set(PROJECT_SRC_FILES
     src/min_port.c
     src/res_usage.c
     src/uart.c
+    src/uart_defs.c
 )
 
 # Declare the include paths.

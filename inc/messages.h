@@ -3,18 +3,20 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 // Used to identify messages using min_id
 enum message_types
 {
     MESSAGE_CONFIG_BUS = /*            */ 0x1,
+    MESSAGE_CONFIG_BUS_REPLY = /*      */ 0x2,
 
-    MESSAGE_PERIODIC_READ_REPLY = /*   */ 0x2, // When a change is detected in a periodic read
+    MESSAGE_PERIODIC_READ_REPLY = /*   */ 0x4, // When a change is detected in a periodic read
 
-    MESSAGE_COMMAND_READ = /*          */ 0x3,
-    MESSAGE_COMMAND_READ_REPLY = /*    */ 0x4,
-    MESSAGE_COMMAND_WRITE = /*         */ 0x5,
-    MESSAGE_COMMAND_WRITE_REPLY = /*   */ 0x6,
+    MESSAGE_COMMAND_READ = /*          */ 0x8,
+    MESSAGE_COMMAND_READ_REPLY = /*    */ 0x9,
+    MESSAGE_COMMAND_WRITE = /*         */ 0xA,
+    MESSAGE_COMMAND_WRITE_REPLY = /*   */ 0xB,
 
     MESSAGE_PICO_READY = /*            */ 0x3D,
     MESSAGE_PICO_RESET = /*            */ 0x3E,
@@ -64,12 +66,19 @@ struct m_command
         // MESSAGE_COMMAND_READ and MESSAGE_COMMAND_TIMEOUT has no additional data
         struct
         {
+            uint8_t bus;             // From 0 to 5
+            bool done;               // If it was successful
+            bool already_configured; // If the bus was already configured
+            bool invalid_bus;        // If the bus number is invalid
+        } __attribute__((packed)) config_bus_reply;
+        struct
+        {
             uint16_t data;      // Data as 16 bits representation
             uint16_t data_mask; // Mask to identify which bits changed
         } __attribute__((packed)) periodic_change;
         struct
         {
-            uint8_t done;  // If it was successful
+            bool done;     // If it was successful
             uint16_t data; // Data as 16 bits representation
         } __attribute__((packed)) read_reply;
         struct
@@ -78,7 +87,7 @@ struct m_command
         } __attribute__((packed)) write;
         struct
         {
-            uint8_t done; // If it was successful
+            bool done; // If it was successful
         } __attribute__((packed)) write_reply;
     } msg;
 } __attribute__((packed));

@@ -2,6 +2,16 @@
 #define __CONFIG_H__
 
 //
+// Task Configuration
+//
+
+#define HOST_TASK_CORE_AFFINITY 0x01
+#define BUS_TASK_CORE_AFFINITY 0x02
+#define UART_ACTIVITY_TASK_CORE_AFFINITY 0x01
+#define UART_MAINTENANCE_TASK_CORE_AFFINITY 0x01
+#define RESOURCE_USAGE_TASK_CORE_AFFINITY 0x02
+
+//
 // Bus Configuration
 //
 
@@ -31,7 +41,7 @@
 // UART Configuration
 //
 
-#define UART_BUFFER_SIZE 256
+#define UART_BUFFER_SIZE 255
 
 // Max number of PIO UARTs possible
 #define COUNT_HW_UARTS NUM_UARTS

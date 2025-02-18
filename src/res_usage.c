@@ -6,6 +6,7 @@
 #include "macrologger.h"
 
 #include "res_usage.h"
+#include "config.h"
 
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
 #warning This Resource Usage code has some issues, the code can crash !Use only if really necessary.
@@ -119,6 +120,12 @@ void res_usage_init(void)
 #if (SHOW_CPU_USAGE == 1 || SHOW_HEAP_USAGE == 1)
     LOG_DEBUG("Initializing Resource Usage");
 
-    xTaskCreate(task_res, "Res Stats", configMINIMAL_STACK_SIZE * 2, NULL, tskIDLE_PRIORITY + 2, NULL);
+    xTaskCreateAffinitySet(task_res,
+                           "Res Stats",
+                           configMINIMAL_STACK_SIZE * 2,
+                           NULL,
+                           tskIDLE_PRIORITY + 1,
+                           RESOURCE_USAGE_TASK_CORE_AFFINITY,
+                           NULL);
 #endif
 }

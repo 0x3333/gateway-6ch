@@ -69,7 +69,7 @@
 
 // SMP port only.
 #ifndef configNUMBER_OF_CORES
-#define configNUMBER_OF_CORES                   1
+#define configNUMBER_OF_CORES                   2
 #endif
 #define configUSE_PASSIVE_IDLE_HOOK             0
 #define configTICK_CORE                         0
@@ -106,7 +106,7 @@
 
 // A header file that defines trace macro can be included here.
 
-#define tskHIGH_PRIORITY                        (configMAX_PRIORITIES / 1)
+#define tskHIGH_PRIORITY                        (configMAX_PRIORITIES -1)
 #define tskDEFAULT_PRIORITY                     (configMAX_PRIORITIES / 2)
 #define tskLOW_PRIORITY                         (configMAX_PRIORITIES / 4)
 
