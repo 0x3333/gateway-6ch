@@ -39,7 +39,6 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
     {
         if (!pio_uart_read_bytes(uart, &read_byte, 1)) // If there is no byte available, wait or timeout
         {
-
             if (IS_EXPIRED(timeout_max_tick)) // Check if the timeout has expired
             {
                 if (IS_EXPIRED(last_timeout)) // Check if we need to print a timeout message
@@ -91,6 +90,9 @@ static void bus_task(void *arg)
     // UART Initialization
     pio_uart_init(bus_context->pio_uart);
 
+    // Wait until all buses are configured and replied to the host
+    vTaskDelay(pdMS_TO_TICKS(BUS_START_DELAY));
+
     for (;;) // Task infinite loop
     {
         // Handle Periodic reads
@@ -104,6 +106,8 @@ static void bus_task(void *arg)
                 LOG_DEBUG(DEVF_FMT "Periodic Read",
                           bus_context->bus, p_read->slave, p_read->address, p_read->function);
 #endif
+                p_read->next_run = NEXT_TIMEOUT(bus_context->periodic_interval); // Update the next run right away, so we don't have a drift
+
                 tx_frame_size = modbus_create_read_frame(
                     p_read->function,
                     p_read->slave,
@@ -138,7 +142,6 @@ static void bus_task(void *arg)
                         }
                     }
                 }
-                p_read->next_run = NEXT_TIMEOUT(bus_context->periodic_interval);
             }
             taskYIELD();
         }

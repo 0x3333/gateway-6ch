@@ -30,7 +30,7 @@ QueueHandle_t host_command_queue;
 void handle_m_config_bus(const struct m_config_bus *msg)
 {
     struct m_command reply = {0};
-    reply.type = MESSAGE_COMMAND_READ_REPLY;
+    reply.type = MESSAGE_CONFIG_BUS_REPLY;
     reply.msg.config_bus_reply.done = false;
 
     if (bus_get_context(msg->bus))
@@ -157,18 +157,20 @@ _Noreturn static void task_host_handler(void *arg)
         {
             switch (command.type)
             {
+            case MESSAGE_CONFIG_BUS_REPLY:
+                LOG_DEBUGD("Sending Config Bus Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.read_reply.done));
+                break;
             case MESSAGE_COMMAND_READ_REPLY:
-                LOG_DEBUGD("Sending READ Response Done: %c", &command.device, LOG_BOOL(command.msg.read_reply.done));
-                safe_min_send_frame(MESSAGE_COMMAND_READ_REPLY, (uint8_t *)&command, sizeof(command));
+                LOG_DEBUGD("Sending READ Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.read_reply.done));
                 break;
             case MESSAGE_COMMAND_WRITE_REPLY:
-                LOG_DEBUGD("Sending WRITE Response Done: %c", &command.device, LOG_BOOL(command.msg.write_reply.done));
-                safe_min_send_frame(MESSAGE_COMMAND_WRITE_REPLY, (uint8_t *)&command, sizeof(command));
+                LOG_DEBUGD("Sending WRITE Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.write_reply.done));
                 break;
             default:
                 LOG_ERROR("Unknown command type %u", command.type);
                 break;
             }
+            safe_min_send_frame(command.type, (uint8_t *)&command, sizeof(command));
         }
 
         if (IS_EXPIRED(next_heartbeat))
@@ -194,7 +196,7 @@ void host_init(void)
 
     xTaskCreateAffinitySet(task_host_handler,
                            "Host Handler",
-                           configMINIMAL_STACK_SIZE,
+                           configMINIMAL_STACK_SIZE * 2,
                            NULL,
                            tskDEFAULT_PRIORITY,
                            HOST_TASK_CORE_AFFINITY,

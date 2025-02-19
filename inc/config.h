@@ -15,16 +15,16 @@
 // Bus Configuration
 //
 
-#define BUS_TIMEOUT 50
-
 #define BUS_MODBUS_FRAME_BUFFER_SIZE 64
 
 // After how many ms we will print the timeout message again
 #define BUS_DELAY_TIMEOUT_MSG 5000
-// After how many ms we will print the timeout message again
-#define BUS_TIMEOUT_RESPONSE 50
+// After how many ms we will consider the modbus command has timed out
+#define BUS_TIMEOUT_RESPONSE 10
 // How many ms we will wait after writing to UART before reading
 #define BUS_DELAY_WRITE_READ 3
+// How many ms we will wait until we start the bus after configured
+#define BUS_START_DELAY 300
 // #define BUS_DEBUG_MODBUS_FRAME
 // #define BUS_DEBUG_PERIODIC_READS
 
@@ -41,7 +41,7 @@
 // UART Configuration
 //
 
-#define UART_BUFFER_SIZE 255
+#define UART_BUFFER_SIZE 1024
 
 // Max number of PIO UARTs possible
 #define COUNT_HW_UARTS NUM_UARTS

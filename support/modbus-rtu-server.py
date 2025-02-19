@@ -13,7 +13,7 @@ class ModbusRTUServer:
         self.memory_size = memory_size
         self.coils = [False] * memory_size
         self.holding_registers = [0] * memory_size
-        self.last_read_times = {i: None for i in range(1, 5)}
+        self.last_read_times = {i: None for i in range(1, 30)}
         self.last_coil_changed = 0
         self.last_register_changed = 0
         self.counter = 0
@@ -109,8 +109,34 @@ class ModbusRTUServer:
 
         return response
 
+    def handle_write_single_coil(self, slave_id, data):
+        output_addr = int.from_bytes(data[2:4], "big")
+        output_value = int.from_bytes(data[4:6], "big")
+
+        # Check if address is valid
+        if not (0 <= output_addr - self.start_addr < self.memory_size):
+            return None
+
+        # Modbus spec: 0xFF00 = ON, 0x0000 = OFF
+        if output_value not in (0xFF00, 0x0000):
+            return None
+
+        # Set the coil value
+        coil_idx = output_addr - self.start_addr
+        new_value = True if output_value == 0xFF00 else False
+        self.coils[coil_idx] = new_value
+
+        # Response is echo of request (minus CRC which will be recalculated)
+        response = bytearray(data[:-2])
+
+        print(
+            f"Write Single Coil: Slave {slave_id}, Addr {output_addr}, Value {new_value}, Request: {data.hex().upper()} Response: {response.hex().upper()}",
+            end="",
+        )
+        return response
+
     def run(self, show_time):
-        timeout = 20.0 / 1000
+        timeout = 10.0 / 1000
         last_check = time.time()
 
         with serial.Serial(self.port, self.baudrate, timeout=1) as ser:
@@ -124,8 +150,6 @@ class ModbusRTUServer:
                         continue
 
                     slave_id = request[0]
-                    if not 1 <= slave_id <= 4:
-                        continue
 
                     function_code = request[1]
                     current_time = datetime.now()
@@ -149,6 +173,8 @@ class ModbusRTUServer:
                         response = self.handle_read_coils(slave_id, request)
                     elif function_code == 0x03:  # Read Holding Registers
                         response = self.handle_read_holding_registers(slave_id, request)
+                    elif function_code == 0x05:  # Write Single Coil
+                        response = self.handle_write_single_coil(slave_id, request)
                     else:
                         print(f"Returning request: {request.hex().upper()}")
                         response = bytearray(request[:-2])
@@ -160,7 +186,7 @@ class ModbusRTUServer:
                 elif time.time() - last_check > timeout:
                     ser.reset_input_buffer()
                     last_check = time.time()
-                time.sleep(0.001)
+                # time.sleep(0.001)
 
 
 if __name__ == "__main__":
