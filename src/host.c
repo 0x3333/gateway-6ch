@@ -15,6 +15,7 @@
 #include "utils.h"
 #include "messages.h"
 #include "bus.h"
+#include "dmx.h"
 
 static struct min_context min_ctx;
 
@@ -93,6 +94,11 @@ void handle_m_pico_reset(const uint8_t *msg)
     watchdog_enable(1, 1); // Enable watchdog and check how to work this out
     while (true)
         ;
+}
+
+void handle_m_dmx_write(const struct m_dmx_write *msg)
+{
+    xQueueSend(dmx_write_queue, msg, FREERTOS_NO_WAIT);
 }
 
 /**

@@ -14,6 +14,10 @@ const struct m_handler m_handlers[] = {
         .handler = (void (*)(const void *))handle_m_command,
     },
     {
+        .message_id = MESSAGE_DMX_WRITE,
+        .handler = (void (*)(const void *))handle_m_dmx_write,
+    },
+    {
         .message_id = MESSAGE_PICO_RESET,
         .handler = (void (*)(const void *))handle_m_pico_reset,
     },

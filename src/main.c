@@ -10,6 +10,7 @@
 #include "uart.h"
 #include "led.h"
 #include "host.h"
+#include "dmx.h"
 #include "messages.h"
 #include "res_usage.h"
 
@@ -52,6 +53,7 @@ int main()
 
     uart_maintenance_init();
     led_init();
+    dmx_init();
     host_init();
     res_usage_init();
 

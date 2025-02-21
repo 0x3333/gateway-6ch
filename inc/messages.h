@@ -17,6 +17,7 @@ enum message_types
     MESSAGE_COMMAND_READ_REPLY = /*    */ 0x9,
     MESSAGE_COMMAND_WRITE = /*         */ 0xA,
     MESSAGE_COMMAND_WRITE_REPLY = /*   */ 0xB,
+    MESSAGE_DMX_WRITE = /*             */ 0xC,
 
     MESSAGE_PICO_READY = /*            */ 0x3D,
     MESSAGE_PICO_RESET = /*            */ 0x3E,
@@ -55,7 +56,14 @@ struct m_config_bus
 } __attribute__((packed));
 
 //
-// Issue a Read/Write Command
+// Write DMX Universe
+struct m_dmx_write
+{
+    uint8_t universe[12];
+} __attribute__((packed));
+
+//
+// Issue a Modbus Command
 struct m_command
 {
     uint8_t type;
@@ -97,9 +105,10 @@ struct m_command
 void handle_m_config_bus(const struct m_config_bus *msg);
 void handle_m_command(const struct m_command *msg);
 void handle_m_pico_reset(const uint8_t *msg);
+void handle_m_dmx_write(const struct m_dmx_write *msg);
 
 //
 // Message handlers array
-extern const struct m_handler m_handlers[4];
+extern const struct m_handler m_handlers[5];
 
 #endif // MESSAGES_H_

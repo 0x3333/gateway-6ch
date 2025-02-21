@@ -2,6 +2,7 @@
 #define __UTILS_H__
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <FreeRTOS.h>
 #include <task.h>
 
@@ -18,7 +19,7 @@
 #define FREERTOS_NO_WAIT (0)
 
 #if (configNUMBER_OF_CORES < 2)
-#define xTaskCreateAffinitySet(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, uxCoreAffinityMask, pxCreatedTask ) xTaskCreate(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, pxCreatedTask)
+#define xTaskCreateAffinitySet(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, uxCoreAffinityMask, pxCreatedTask) xTaskCreate(pxTaskCode, pcName, uxStackDepth, pvParameters, uxPriority, pxCreatedTask)
 #endif
 
 //

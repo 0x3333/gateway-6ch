@@ -1,83 +1,154 @@
 #include <unistd.h>
 
+#include <FreeRTOS.h>
+#include <semphr.h>
+
 #include "dmx.h"
+#include "messages.h"
+#include "utils.h"
+
 #include "dmx.pio.h"
+#include "macrologger.h"
 
-static ssize_t add_active_dmx(struct dmx *dmx)
+struct dmx
 {
-    size_t i;
-    for (i = 0; i < COUNT_PIO_DMX; i++)
-    {
-        if (active_dmxs[i] == NULL)
-        {
-            active_dmxs[i] = dmx;
-            return i;
-        }
-    }
-    return -1;
-}
+    const uint tx_pin;
+    const uint en_pin;
 
-void dmx_init(struct dmx *const dmx)
+    PIO pio;
+    uint sm;
+    uint offset;
+    uint dma_channel;
+    dma_channel_config dma_config;
+    uint8_t dma_buffer_length;
+    uint8_t dma_buffer[DMX_MAX_CHANNELS + 1]; // 1 extra byte for start code
+};
+
+struct dmx dmx = {
+    .tx_pin = DMX_TX_PIN,
+    .en_pin = DMX_EN_PIN,
+    .dma_buffer_length = 0,
+    .dma_buffer = {0},
+};
+
+QueueHandle_t dmx_write_queue;
+
+static void task_dmx_tx(void *arg);
+
+void dmx_init()
 {
+    LOG_DEBUG("Initializing DMX");
+
+    //
+    // Initialize DMX PIO
     static int program_offset = PICO_ERROR_GENERIC;
-
-    // Add this DMX to the active dmx array
-    add_active_dmx(dmx);
 
     // Add program if not already
     if (program_offset <= PICO_ERROR_GENERIC)
     {
         program_offset = pio_add_program(DMX_PIO, &dmx_program);
     }
-    dmx->pio = DMX_PIO;
-    int sm = pio_claim_unused_sm(dmx->pio, true);
+    dmx.offset = program_offset;
+    dmx.pio = DMX_PIO;
+    int sm = pio_claim_unused_sm(dmx.pio, true);
     if (sm == -1)
     {
         panic("No DMX State Machine available!");
     }
-    dmx->sm = sm;
-    dmx_program_init(dmx->pio, dmx->sm, (uint)program_offset, dmx->tx_pin, dmx->en_pin);
+    dmx.sm = sm;
+    dmx_program_init(dmx.pio, dmx.sm, (uint)program_offset, dmx.tx_pin, dmx.en_pin, DMX_BAUDRATE);
 
     // Initialize DMX DMA
-    int dma = dma_claim_unused_channel(false);
-    if (dma == -1)
-        panic("No DMA channel available!");
-    dmx->dma = dma;
-
-    dma_channel_config dma_conf = dma_channel_get_default_config(dma);
-    // Set the DMA to move one byte per DREQ signal
-    channel_config_set_transfer_data_size(&dma_conf, DMA_SIZE_8);
-    // Setup the DREQ so that the DMA only moves data when there
-    // is available room in the TXF buffer of our PIO state machine
-    channel_config_set_dreq(&dma_conf, pio_get_dreq(dmx->pio, dmx->sm, true));
-    // Setup the DMA to write to the TXF buffer of the PIO state machine
-    dma_channel_set_write_addr(dma, &dmx->pio->txf[dmx->sm], false);
-    // Apply the config
-    dma_channel_set_config(dma, &dma_conf, false);
-}
-
-void dmx_write(struct dmx *dmx, uint8_t *universe, size_t length)
-{
-    pio_sm_set_enabled(dmx->pio, dmx->sm, false);
-
-    // Reset the PIO state machine to a consistent state. Clear the buffers and registers
-    pio_sm_restart(dmx->pio, dmx->sm);
-
-    // Start the DMX PIO program from the beginning
-    pio_sm_exec(dmx->pio, dmx->sm, pio_encode_jmp(dmx->offset));
-
-    // Restart the PIO state machinge
-    pio_sm_set_enabled(dmx->pio, dmx->sm, true);
-
-    // Start the DMA transfer
-    dma_channel_transfer_from_buffer_now(dmx->dma, universe, length);
-}
-
-bool dmx_is_busy(struct dmx *dmx)
-{
-    if (dma_channel_is_busy(dmx->dma))
+    int dma_channel = dma_claim_unused_channel(true);
+    if (dma_channel <= PICO_ERROR_GENERIC)
     {
-        return true;
+        panic("No DMA Channel available for DMX!");
     }
-    return !pio_sm_is_tx_fifo_empty(dmx->pio, dmx->sm);
+    dmx.dma_channel = dma_channel;
+    dmx.dma_config = dma_channel_get_default_config(dma_channel);
+    channel_config_set_transfer_data_size(&dmx.dma_config, DMA_SIZE_8);
+    channel_config_set_dreq(&dmx.dma_config, pio_get_dreq(dmx.pio, dmx.sm, true));
+    channel_config_set_read_increment(&dmx.dma_config, true);
+    channel_config_set_write_increment(&dmx.dma_config, false);
+    dma_channel_set_write_addr(dmx.dma_channel, &dmx.pio->txf[dmx.sm], false);
+    dma_channel_set_config(dmx.dma_channel, &dmx.dma_config, false);
+
+    //
+    // Initialize DMX Task
+
+    dmx_write_queue = xQueueCreate(DMX_WRITE_QUEUE_LENGTH, sizeof(struct m_dmx_write));
+
+    xTaskCreateAffinitySet(task_dmx_tx,
+                           "DMX TX",
+                           configMINIMAL_STACK_SIZE,
+                           NULL,
+                           tskLOW_PRIORITY,
+                           HOST_TASK_CORE_AFFINITY,
+                           NULL);
+}
+
+void dmx_write(const uint8_t *universe, uint8_t length)
+{
+    if (length > sizeof(dmx.dma_buffer))
+    {
+        LOG_ERROR("DMX universe length exceeds buffer size, output will be truncated!");
+    }
+
+    // Block task if DMA is still transmitting
+    bool issued = false;
+    while (!dmx_is_writable())
+    {
+        if (!issued)
+        {
+            issued = true;
+            LOG_ERROR("DMX delaying write...");
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    // Transfer data array to DMA buffer
+    dmx.dma_buffer[0] = 0; // Start code
+    memcpy(dmx.dma_buffer + 1, universe, MIN(DMX_MAX_CHANNELS, length));
+
+    // Restart SM and start DMA transfer
+    pio_sm_set_enabled(dmx.pio, dmx.sm, false);
+    pio_sm_restart(dmx.pio, dmx.sm);
+    pio_sm_exec(dmx.pio, dmx.sm, pio_encode_jmp(dmx.offset));
+    pio_sm_set_enabled(dmx.pio, dmx.sm, true);
+    dma_channel_transfer_from_buffer_now(
+        dmx.dma_channel,
+        dmx.dma_buffer,
+        MIN(sizeof(dmx.dma_buffer), length));
+}
+
+bool dmx_is_writable()
+{
+    return !dma_channel_is_busy(dmx.dma_channel) && pio_sm_is_tx_fifo_empty(dmx.pio, dmx.sm);
+}
+
+_Noreturn static void task_dmx_tx(void *arg)
+{
+    (void)arg;
+    uint8_t *data = pvPortMalloc(sizeof(struct m_dmx_write));
+
+    TickType_t next_write = 0;
+
+    struct m_dmx_write write = {.universe = {0}};
+
+    for (;;) // Task infinite loop
+    {
+        if (xQueueReceive(dmx_write_queue, &write, 0))
+        {
+            memcpy(data, write.universe, sizeof(write.universe));
+            LOG_DEBUG("DMX Write %s", to_hex_string(data, sizeof(write.universe)));
+        }
+
+        if (IS_EXPIRED(next_write))
+        {
+            dmx_write(data, sizeof(data));
+            next_write = NEXT_TIMEOUT(DMX_REFRESH_RATE_MS);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
 }

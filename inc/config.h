@@ -20,7 +20,7 @@
 // After how many ms we will print the timeout message again
 #define BUS_DELAY_TIMEOUT_MSG 5000
 // After how many ms we will consider the modbus command has timed out
-#define BUS_TIMEOUT_RESPONSE 10
+#define BUS_TIMEOUT_RESPONSE 100
 // How many ms we will wait after writing to UART before reading
 #define BUS_DELAY_WRITE_READ 3
 // How many ms we will wait until we start the bus after configured
@@ -76,12 +76,13 @@
 // DMX Configuration
 //
 
-#define COUNT_PIO_DMX 1u
-
-#define DMX_PIO pio1
-#define DMX_SM_FREQ 1000000
-#define DMX_UNIVERSE_SIZE 512
-
+#define DMX_PIO pio0
+#define DMX_BAUDRATE 250000
+#define DMX_MAX_CHANNELS 12
+#define DMX_TX_PIN 26
+#define DMX_EN_PIN 27
+#define DMX_REFRESH_RATE_MS ((TickType_t)(1000 / 30)) /* 30 Hz*/
+#define DMX_WRITE_QUEUE_LENGTH 10
 //
 // LED Configuration
 //

@@ -1,31 +1,34 @@
 ; Author: Jostein Løwer, github: jostlowe
+; Author: Tercio Filho, github: 0x3333
 ; SPDX-License-Identifier: BSD-3-Clause
 ; 
-; PIO program for outputting the DMX lighting protocol.
-; Compliant with ANSI E1.11-2008 (R2018)
-; The program assumes a PIO clock frequency of exactly 1MHz
+
+; 0.000002s = 2us
+; Every bit is 4us long, so, 1 bit length = 2 cycles
 
 .program dmx
 .side_set 1 opt
 
+; We could add a "wait 1 irq rel(0)" and move .wrap_target to here instead of resetting the SM everytime
 
 ; Assert break condition
-    set x, 21   side 0     ; Preload bit counter, assert break condition for 176us 
-breakloop:                 ; This loop will run 22 times
-    jmp x-- breakloop [7]  ; Each loop iteration is 8 cycles.
+    set x, 12   side 0 [7]  ; Preload bit counter, assert break condition for 208us 
+breakloop:                  ; This loop will run 13 times + 8 cycles from set instruction
+    jmp x-- breakloop [7]   ; Each loop iteration is 8 cycles.
 
 
 ; Assert start condition
-    nop [7]    side 1      ; Assert MAB. 8 cycles nop and 8 cycles stop-bits = 16us
+    nop [7]    side 1       ; Assert MAB. 10 cycles (1 nop + 9 delay), stop-bits = 20us
+    nop [1]                 ;
 
 
 ; Send data frame
 .wrap_target
-    pull       side 1 [7]  ; Assert 2 stop bits, or stall with line in idle state
-    set x, 7   side 0 [3]  ; Preload bit counter, assert start bit for 4 clocks
-bitloop:                   ; This loop will run 8 times (8n1 UART)
-    out pins, 1            ; Shift 1 bit from OSR to the first OUT pin
-    jmp x-- bitloop   [2]  ; Each loop iteration is 4 cycles.
+    pull       side 1 [3]   ; Assert 2 stop bits, or stall with line in idle state
+    set x, 7   side 0 [1]   ; Preload bit counter, assert start bit for 2 clock
+bitloop:                    ; This loop will run 8 times (8n1 UART)
+    out pins, 1             ; Shift 1 bit from OSR to the first OUT pin
+    jmp x-- bitloop         ; Each loop iteration is 2 cycles.
 .wrap
 
 % c-sdk {
@@ -35,27 +38,33 @@ bitloop:                   ; This loop will run 8 times (8n1 UART)
 
 #include "config.h"
 
-static inline void dmx_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint en_pin)
+static inline void dmx_program_init(PIO pio, uint sm, uint offset, uint tx_pin, uint en_pin, uint baud)
 {
     // Set this pin's GPIO function (connect PIO to the pad)
     pio_sm_set_pins_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
     pio_sm_set_pindirs_with_mask(pio, sm, 1u << tx_pin, 1u << tx_pin);
     pio_gpio_init(pio, tx_pin);
 
-    pio_gpio_init(pio, en_pin);
+    // Set RS485 enable pin always high
+    gpio_init(en_pin);
     gpio_set_dir(en_pin, GPIO_OUT);
     gpio_put(en_pin, 1);
 
-    // Generate the default PIO state machine config provided by pioasm
     pio_sm_config c = dmx_program_get_default_config(offset);
+
+    // OUT shifts to right, no autopull
+    sm_config_set_out_shift(&c, true, false, 8);
 
     // Setup the side-set pins for the PIO state machine
     sm_config_set_out_pins(&c, tx_pin, 1);
     sm_config_set_sideset_pins(&c, tx_pin);
 
-    // Setup the clock divider to run the state machine at exactly 1MHz
-    uint clk_div = clock_get_hz(clk_sys) / DMX_SM_FREQ;
-    sm_config_set_clkdiv(&c, clk_div);
+    // We only need TX, so get an 8-deep FIFO!
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // SM transmits 1 bit per 8 execution cycles.
+    float div = (float)clock_get_hz(clk_sys) / (2 * baud);
+    sm_config_set_clkdiv(&c, div);
 
     // Load our configuration, jump to the start of the program and run the State Machine
     pio_sm_init(pio, sm, offset, &c);

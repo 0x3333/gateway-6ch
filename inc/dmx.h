@@ -2,6 +2,9 @@
 #define DMX_H_
 
 #include "hardware/pio.h"
+#include "hardware/dma.h"
+#include <FreeRTOS.h>
+#include <queue.h>
 
 #include "config.h"
 
@@ -9,30 +12,18 @@
 // Data Structures
 //
 
-struct dmx
-{
-    const uint tx_pin;
-    const uint en_pin;
-
-    PIO pio;
-    uint sm;
-    uint dma;
-    uint offset;
-};
-
 //
 // Variables
 //
 
-// Null terminated array of PIO DMXs
-extern struct dmx *active_dmxs[COUNT_PIO_DMX + 1];
+extern QueueHandle_t dmx_write_queue;
 
 //
 // Prototypes
 //
 
-void dmx_init(struct dmx *const dmx);
-void dmx_write(struct dmx *const dmx, uint8_t *universe, size_t length);
-bool dmx_is_busy(struct dmx *const dmx);
+void dmx_init();
+void dmx_write(const uint8_t *universe, uint8_t length);
+bool dmx_is_writable();
 
 #endif
