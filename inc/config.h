@@ -45,7 +45,7 @@
 
 // Max number of PIO UARTs possible
 #define COUNT_HW_UARTS NUM_UARTS
-#define COUNT_PIO_UARTS 6u
+#define COUNT_PIO_UARTS 5u
 #define MAX_PIO_UARTS (NUM_PIOS * NUM_PIO_STATE_MACHINES / 2u)
 
 /*

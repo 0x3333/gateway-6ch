@@ -71,16 +71,19 @@ struct pio_uart pio_uart_4 = {
     .en_pin = 21,
 };
 
-struct pio_uart pio_uart_5 = {
-    .super = {
-        .type = "PIO",
-        .baudrate = PIO_UART_DEFAULT_BAUDRATE,
-        .rx_pin = 28,
-        .tx_pin = 26,
-        .id = 5,
-    },
-    .en_pin = 27,
-};
+//
+// Note: Bus 6 is now associated with DMX
+//
+// struct pio_uart pio_uart_5 = {
+//     .super = {
+//         .type = "PIO",
+//         .baudrate = PIO_UART_DEFAULT_BAUDRATE,
+//         .rx_pin = 28,
+//         .tx_pin = 26,
+//         .id = 5,
+//     },
+//     .en_pin = 27,
+// };
 
 struct hw_uart *active_hw_uarts[COUNT_HW_UARTS + 1] = {NULL};
 struct pio_uart *active_pio_uarts[COUNT_PIO_UARTS + 1] = {NULL};

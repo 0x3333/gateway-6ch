@@ -70,8 +70,6 @@ struct pio_uart *get_pio_uart_by_index(uint8_t index)
         return &pio_uart_3;
     case 4:
         return &pio_uart_4;
-    case 5:
-        return &pio_uart_5;
     default:
         return NULL;
     }

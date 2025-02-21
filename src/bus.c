@@ -14,7 +14,6 @@ char *name[COUNT_PIO_UARTS] = {
     "Bus 2",
     "Bus 3",
     "Bus 4",
-    "Bus 5",
 };
 
 static struct bus_context *bus_contexts[COUNT_PIO_UARTS] = {NULL};
