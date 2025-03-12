@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include "config.h"
+
 // Used to identify messages using min_id
 enum message_types
 {
@@ -59,7 +61,7 @@ struct m_config_bus
 // Write DMX Universe
 struct m_dmx_write
 {
-    uint8_t universe[12];
+    uint8_t universe[DMX_MAX_CHANNELS];
 } __attribute__((packed));
 
 //
