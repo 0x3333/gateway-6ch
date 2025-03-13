@@ -20,7 +20,7 @@
 // After how many ms we will print the timeout message again
 #define BUS_DELAY_TIMEOUT_MSG 5000
 // After how many ms we will consider the modbus command has timed out
-#define BUS_TIMEOUT_RESPONSE 100
+#define BUS_TIMEOUT_RESPONSE 20
 // How many ms we will wait after writing to UART before reading
 #define BUS_DELAY_WRITE_READ 3
 // How many ms we will wait until we start the bus after configured
@@ -33,7 +33,7 @@
 //
 
 #define HOST_UART hw_uart1
-#define HOST_QUEUE_LENGTH 100
+#define HOST_QUEUE_LENGTH 200
 #define HOST_HEARTBEAT_INTERVAL 1000
 // #define HOST_DEBUG_MIN_FRAME
 
@@ -81,8 +81,9 @@
 #define DMX_MAX_CHANNELS 12
 #define DMX_TX_PIN 26
 #define DMX_EN_PIN 27
+// FIXME: This is incorrect naming. It is more a delay between writes then a refresh rate.
 #define DMX_REFRESH_RATE_MS ((TickType_t)(1000 / 30)) /* 30 Hz*/
-#define DMX_WRITE_QUEUE_LENGTH 10
+#define DMX_WRITE_QUEUE_LENGTH 100
 //
 // LED Configuration
 //
