@@ -3,6 +3,7 @@
 #include <FreeRTOS.h>
 #include <semphr.h>
 
+#include "defs.h"
 #include "dmx.h"
 #include "messages.h"
 #include "utils.h"
@@ -25,8 +26,8 @@ struct dmx
 };
 
 struct dmx dmx = {
-    .tx_pin = DMX_TX_PIN,
-    .en_pin = DMX_EN_PIN,
+    .tx_pin = BUS_6_TX_PIN,
+    .en_pin = BUS_6_EN_PIN,
     .dma_buffer_length = 0,
     .dma_buffer = {0},
 };
