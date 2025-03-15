@@ -40,6 +40,8 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
         {
             if (IS_EXPIRED(timeout_max_tick)) // Check if the timeout has expired
             {
+                // FIXME: This contention to print timeout is not doing anything useful.
+                // This function will print several timeouts for each time it is called
                 if (IS_EXPIRED(last_timeout)) // Check if we need to print a timeout message
                 {
                     LOG_ERROR(DEV_FMT "Timeout", bus, slave, address);
