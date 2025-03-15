@@ -146,7 +146,7 @@ _Noreturn static void task_dmx_tx(void *arg)
         if (IS_EXPIRED(next_write))
         {
             dmx_write(data, sizeof(data));
-            next_write = NEXT_TIMEOUT(DMX_REFRESH_RATE_MS);
+            next_write = NEXT_TIMEOUT(DMX_DELAY_BETWEEN_WRITES);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1));
