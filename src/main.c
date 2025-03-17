@@ -16,6 +16,12 @@
 
 int main()
 {
+    // Disable IO that is wrongly connected to the ESP
+    gpio_init(2);
+    gpio_set_dir(2, GPIO_IN);
+    gpio_init(3);
+    gpio_set_dir(3, GPIO_IN);
+
     // Allow core1 to launch when debugger is atached
     timer_hw->dbgpause = 0;
     multicore_reset_core1();
