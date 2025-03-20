@@ -12,15 +12,12 @@
 ; We could add a "wait 1 irq rel(0)" and move .wrap_target to here instead of resetting the SM everytime
 
 ; Assert break condition
-    set x, 12   side 0 [7]  ; Preload bit counter, assert break condition for 208us 
-breakloop:                  ; This loop will run 13 times + 8 cycles from set instruction
-    jmp x-- breakloop [7]   ; Each loop iteration is 8 cycles.
-
+    set x, 4   side 0 [7]  ; Preload bit counter, assert break condition for 96us
+breakloop:                 ; This loop will run 5 times + 8 cycles from set instruction
+    jmp x-- breakloop [7]  ; Each loop iteration is 8 cycles.
 
 ; Assert start condition
-    nop [7]    side 1       ; Assert MAB. 10 cycles (1 nop + 9 delay), stop-bits = 20us
-    nop [1]                 ;
-
+    nop        side 1 [5]  ; Assert MAB. 10 cycles (1 nop + 6 delay), stop-bits = 12us
 
 ; Send data frame
 .wrap_target

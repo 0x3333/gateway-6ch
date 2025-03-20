@@ -78,7 +78,7 @@
 
 #define DMX_PIO pio0
 #define DMX_BAUDRATE 250000
-#define DMX_MAX_CHANNELS 13
+#define DMX_MAX_CHANNELS 12
 #define DMX_DELAY_BETWEEN_WRITES ((TickType_t)(1000 / 30)) /* 30 Hz is well known a good value */
 #define DMX_WRITE_QUEUE_LENGTH 100
 //
