@@ -104,7 +104,7 @@ void dmx_write(const uint8_t *universe, uint8_t length)
             issued = true;
             LOG_ERROR("DMX delaying write...");
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        taskYIELD();
     }
 
     // Transfer data array to DMA buffer
@@ -119,7 +119,7 @@ void dmx_write(const uint8_t *universe, uint8_t length)
     dma_channel_transfer_from_buffer_now(
         dmx.dma_channel,
         dmx.dma_buffer,
-        MIN(sizeof(dmx.dma_buffer), length));
+        MIN(sizeof(dmx.dma_buffer), length + 1));
 }
 
 bool dmx_is_writable()
@@ -130,23 +130,23 @@ bool dmx_is_writable()
 _Noreturn static void task_dmx_tx(void *arg)
 {
     (void)arg;
-    uint8_t *data = pvPortMalloc(sizeof(struct m_dmx_write));
+    struct m_dmx_write data = {.universe = {0}};
 
     TickType_t next_write = 0;
 
-    struct m_dmx_write write = {.universe = {0}};
+    struct m_dmx_write to_write = {.universe = {0}};
 
     for (;;) // Task infinite loop
     {
-        if (xQueueReceive(dmx_write_queue, &write, 0))
+        if (xQueueReceive(dmx_write_queue, &to_write, 0))
         {
-            memcpy(data, write.universe, sizeof(write.universe));
-            LOG_DEBUG("DMX Write %s", to_hex_string(data, sizeof(write.universe)));
+            memcpy(data.universe, to_write.universe, sizeof(to_write.universe));
+            LOG_DEBUG("DMX Write %s", to_hex_string(data.universe, sizeof(to_write.universe)));
         }
 
         if (IS_EXPIRED(next_write))
         {
-            dmx_write(data, sizeof(data));
+            dmx_write(data.universe, sizeof(data.universe));
             next_write = NEXT_TIMEOUT(DMX_DELAY_BETWEEN_WRITES);
         }
 
