@@ -131,23 +131,28 @@ _Noreturn static void task_dmx_tx(void *arg)
 {
     (void)arg;
     struct m_dmx_write data = {.universe = {0}};
+    struct m_dmx_write to_write = {.universe = {0}};
+    bool has_write = false;
 
     TickType_t next_write = 0;
-
-    struct m_dmx_write to_write = {.universe = {0}};
-
     for (;;) // Task infinite loop
     {
-        if (xQueueReceive(dmx_write_queue, &to_write, 0))
+        // Read all DMX writes wainting in the queue
+        while (xQueueReceive(dmx_write_queue, &to_write, 0) != errQUEUE_EMPTY)
         {
             memcpy(data.universe, to_write.universe, sizeof(to_write.universe));
-            LOG_DEBUG("DMX Write %s", to_hex_string(data.universe, sizeof(to_write.universe)));
+            has_write = true;
         }
 
         if (IS_EXPIRED(next_write))
         {
-            dmx_write(data.universe, sizeof(data.universe));
             next_write = NEXT_TIMEOUT(DMX_DELAY_BETWEEN_WRITES);
+            if (has_write)
+            {
+                has_write = false;
+                dmx_write(data.universe, sizeof(data.universe));
+                LOG_DEBUG("DMX Write %s", to_hex_string(data.universe, sizeof(to_write.universe)));
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(1));

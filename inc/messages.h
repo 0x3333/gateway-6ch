@@ -73,7 +73,6 @@ struct m_command
     struct m_device device;
     union
     {
-        // MESSAGE_COMMAND_READ and MESSAGE_COMMAND_TIMEOUT has no additional data
         struct
         {
             uint8_t bus;             // From 0 to 5
@@ -88,6 +87,10 @@ struct m_command
         } __attribute__((packed)) periodic_change;
         struct
         {
+            uint8_t _dummy;
+        } __attribute__((packed)) read;
+        struct
+        {
             bool done;     // If it was successful
             uint16_t data; // Data as 16 bits representation
         } __attribute__((packed)) read_reply;
@@ -99,6 +102,10 @@ struct m_command
         {
             bool done; // If it was successful
         } __attribute__((packed)) write_reply;
+        struct
+        {
+            uint8_t _dummy;
+        } __attribute__((packed)) timeout;
     } msg;
 } __attribute__((packed));
 
