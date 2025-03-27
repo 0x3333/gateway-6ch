@@ -20,12 +20,13 @@
 // After how many ms we will print the timeout message again
 #define BUS_DELAY_TIMEOUT_MSG 5000
 // After how many ms we will consider the modbus command has timed out
-#define BUS_TIMEOUT_RESPONSE 20
+#define BUS_TIMEOUT_RESPONSE 100
 // How many ms we will wait after writing to UART before reading
 #define BUS_DELAY_WRITE_READ 3
 // How many ms we will wait until we start the bus after configured
 #define BUS_START_DELAY 300
-// #define BUS_DEBUG_MODBUS_FRAME
+// #define BUS_DEBUG_MODBUS_TX_FRAME
+// #define BUS_DEBUG_MODBUS_RX_FRAME
 // #define BUS_DEBUG_PERIODIC_READS
 
 //
@@ -69,7 +70,7 @@
 #error PIO_UART_TX_FIFO_IRQ_INDEX cannot be equal PIO_UART_RX_FIFO_IRQ_INDEX
 #endif
 
-#define HW_UART_DEFAULT_BAUDRATE 230400
+#define HW_UART_DEFAULT_BAUDRATE 921600
 #define PIO_UART_DEFAULT_BAUDRATE 115200
 
 //

@@ -164,10 +164,15 @@ _Noreturn static void task_host_handler(void *arg)
             switch (command.type)
             {
             case MESSAGE_CONFIG_BUS_REPLY:
-                LOG_DEBUGD("Sending Config Bus Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.read_reply.done));
+                LOG_DEBUGD("Sending Config Bus Reply Seq: %u Done: %c, Al.Config: %c, Inv.Bus: %c",
+                           &command.device,
+                           command.seq,
+                           LOG_BOOL(command.msg.config_bus_reply.done),
+                           LOG_BOOL(command.msg.config_bus_reply.already_configured),
+                           LOG_BOOL(command.msg.config_bus_reply.invalid_bus));
                 break;
             case MESSAGE_COMMAND_READ_REPLY:
-                LOG_DEBUGD("Sending READ Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.read_reply.done));
+                LOG_DEBUGD("Sending READ Reply Seq: %u Done: %c Data: %04X", &command.device, command.seq, LOG_BOOL(command.msg.read_reply.done), command.msg.read_reply.data);
                 break;
             case MESSAGE_COMMAND_WRITE_REPLY:
                 LOG_DEBUGD("Sending WRITE Reply Seq: %u Done: %c", &command.device, command.seq, LOG_BOOL(command.msg.write_reply.done));

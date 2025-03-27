@@ -26,15 +26,19 @@ enum modbus_parser_state
     WAIT_LENGTH,
     WAIT_DATA,
     WAIT_CRC1,
-    WAIT_CRC2
+    WAIT_CRC2,
+
 };
 
 // Result enum
 enum modbus_result
 {
     MODBUS_COMPLETE = 0,
-    MODBUS_ERROR = 1,
-    MODBUS_INCOMPLETE = 2
+    MODBUS_INCOMPLETE = 1,
+    MODBUS_ERROR_SLAVE = 2,
+    MODBUS_ERROR_FUNCTION = 3,
+    MODBUS_ERROR_EXCEPTION = 4,
+    MODBUS_ERROR_CRC = 5,
 };
 
 // Parser context structure
@@ -81,7 +85,7 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
         frame->slave = byte;
         if (byte > 247)
         {
-            ret = MODBUS_ERROR;
+            ret = MODBUS_ERROR_SLAVE;
             modbus_parser_reset(parser);
         }
         else
@@ -95,8 +99,16 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
         frame->function_code = byte;
         if (!is_valid_modbus_function(byte))
         {
-            ret = MODBUS_ERROR;
-            modbus_parser_reset(parser);
+            if (is_valid_modbus_function(byte & 0x7F))
+            {
+                ret = MODBUS_ERROR_EXCEPTION;
+                modbus_parser_reset(parser);
+            }
+            else
+            {
+                ret = MODBUS_ERROR_FUNCTION;
+                modbus_parser_reset(parser);
+            }
         }
         else
         {
@@ -139,6 +151,7 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
         update_crc(&parser->crc, byte);
         parser->data_length = byte;
         frame->data_size = 0;
+        memset(frame->data, 0, sizeof(frame->data));
         parser->state = WAIT_DATA;
         break;
 
@@ -158,7 +171,7 @@ static inline enum modbus_result modbus_parser_process_byte(struct modbus_parser
 
     case WAIT_CRC2:
         frame->crc |= (byte << 8);
-        ret = (parser->crc == frame->crc) ? MODBUS_COMPLETE : MODBUS_ERROR;
+        ret = (parser->crc == frame->crc) ? MODBUS_COMPLETE : MODBUS_ERROR_CRC;
         modbus_parser_reset(parser);
         break;
     }

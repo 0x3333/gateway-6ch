@@ -153,7 +153,9 @@ static inline size_t modbus_create_read_frame(enum modbus_function function,
 {
     if (function == MODBUS_FUNCTION_READ_COILS)
     {
-        return modbus_create_read_coils_frame(slave_address, start_address, 16, frame, frame_size);
+        uint8_t addr = start_address / 16;
+        uint8_t len = start_address % 16 + 1;
+        return modbus_create_read_coils_frame(slave_address, addr, len, frame, frame_size);
     }
     else if (function == MODBUS_FUNCTION_READ_HOLDING_REGISTERS)
     {

@@ -100,13 +100,14 @@ struct m_command
         } __attribute__((packed)) write;
         struct
         {
-            bool done; // If it was successful
+            bool done;     // If it was successful
+            uint16_t data; // Data as 16 bits representation
         } __attribute__((packed)) write_reply;
         struct
         {
             uint8_t _dummy;
         } __attribute__((packed)) timeout;
-    } msg;
+    } __attribute__((packed)) msg;
 } __attribute__((packed));
 
 //

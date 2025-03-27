@@ -24,6 +24,11 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
     uint8_t read_byte = 0xaa;
     TickType_t last_timeout = 0;
 
+#ifdef BUS_DEBUG_MODBUS_TX_FRAME
+    LOG_DEBUG(DEV_FMT "Modbus Tx Frame: %s",
+              bus, slave, address, to_hex_string(tx_frame, frame_size));
+#endif
+
     pio_uart_rx_flush(uart);                                   // Flush any remaining byte in the UART RX buffer
     pio_uart_write_bytes_blocking(uart, tx_frame, frame_size); // Write the frame to the UART
 
@@ -58,15 +63,15 @@ static bool send_modbus_frame(uint8_t bus, struct pio_uart *uart, uint8_t slave,
 
         // Process parser result
         enum modbus_result parser_status = modbus_parser_process_byte(&parser, rx_frame, read_byte);
-        if (parser_status == MODBUS_ERROR)
+        if (parser_status >= MODBUS_ERROR_SLAVE)
         {
-            LOG_ERROR(DEV_FMT "Error parsing Modbus Frame", bus, slave, address);
+            LOG_ERROR(DEV_FMT "Error %u parsing Modbus Frame", bus, slave, address, parser_status);
             break; // while, process next module
         }
         else if (parser_status == MODBUS_COMPLETE)
         {
-#ifdef BUS_DEBUG_MODBUS_FRAME
-            LOG_DEBUG(DEV_FMT "Modbus Frame: %s",
+#ifdef BUS_DEBUG_MODBUS_RX_FRAME
+            LOG_DEBUG(DEV_FMT "Modbus Rx Frame: %s",
                       bus, slave, address, to_hex_string(rx_frame->data, rx_frame->data_size));
 #endif
             return true;
@@ -228,10 +233,13 @@ static void bus_task(void *arg)
                         {
                         case MESSAGE_COMMAND_READ:
                             reply.msg.read_reply.done = true;
-                            reply.msg.read_reply.data = rx_frame.data[0] << 8 | rx_frame.data[1];
+                            // FIXME: This is probably wrong, MSB is 0 not 1.
+                            reply.msg.read_reply.data = rx_frame.data[1] << 8 | rx_frame.data[0];
                             break;
                         case MESSAGE_COMMAND_WRITE:
                             reply.msg.write_reply.done = true;
+                            reply.msg.write_reply.data = command.msg.write.data;
+                            printf("Data: %04X\n", reply.msg.write_reply.data);
                             break;
                         }
                     }
